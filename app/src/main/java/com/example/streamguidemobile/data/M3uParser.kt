@@ -22,21 +22,19 @@ class M3uParser {
                 line.startsWith("#") -> Unit
                 pending != null -> {
                     val info = pending
-                    if (info != null) {
-                        val tvgName = info.attributes["tvg-name"].cleanOrNull()
-                        val displayName = info.displayName.cleanOrNull()
-                        yield(
-                            ParsedChannel(
-                                name = tvgName ?: displayName ?: "Kanaal ${count + 1}",
-                                tvgId = info.attributes["tvg-id"].cleanOrNull(),
-                                tvgName = tvgName,
-                                logoUrl = info.attributes["tvg-logo"].cleanOrNull(),
-                                groupTitle = info.attributes["group-title"].cleanOrNull() ?: DEFAULT_GROUP,
-                                streamUrl = line
-                            )
+                    val tvgName = info.attributes["tvg-name"].cleanOrNull()
+                    val displayName = info.displayName.cleanOrNull()
+                    yield(
+                        ParsedChannel(
+                            name = tvgName ?: displayName ?: "Kanaal ${count + 1}",
+                            tvgId = info.attributes["tvg-id"].cleanOrNull(),
+                            tvgName = tvgName,
+                            logoUrl = info.attributes["tvg-logo"].cleanOrNull(),
+                            groupTitle = info.attributes["group-title"].cleanOrNull() ?: DEFAULT_GROUP,
+                            streamUrl = line
                         )
-                        count += 1
-                    }
+                    )
+                    count += 1
                     pending = null
                 }
             }

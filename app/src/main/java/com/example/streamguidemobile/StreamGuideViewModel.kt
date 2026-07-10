@@ -15,17 +15,21 @@ import com.example.streamguidemobile.data.TextSourceReader
 import com.example.streamguidemobile.data.XmltvParser
 import com.example.streamguidemobile.data.XtreamClient
 import com.example.streamguidemobile.data.XtreamSourceCodec
+import com.example.streamguidemobile.domain.isGroupVisible
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.time.LocalDate
+import java.time.ZoneId
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class StreamGuideViewModel(application: Application) : AndroidViewModel(application) {
@@ -44,12 +48,26 @@ class StreamGuideViewModel(application: Application) : AndroidViewModel(applicat
     private val showRecent = MutableStateFlow(false)
     private val action = MutableStateFlow(ActionState())
     private val now = MutableStateFlow(System.currentTimeMillis())
+    private val guideDayStart = MutableStateFlow(startOfTodayMillis())
 
     init {
         viewModelScope.launch {
             while (true) {
                 now.value = System.currentTimeMillis()
                 delay(60_000)
+            }
+        }
+        viewModelScope.launch {
+            val settings = settingsRepository.settings.first()
+            val playlists = playlistDao.getAllOnce()
+            if (playlists.isNotEmpty() && (settings.syncPlaylistsOnStart || settings.syncEpgOnStart)) {
+                action.value = ActionState(isLoading = true, message = "Automatisch synchroniseren")
+                val result = synchronizeAll(
+                    playlists = playlists,
+                    syncPlaylists = settings.syncPlaylistsOnStart,
+                    syncEpg = settings.syncEpgOnStart
+                )
+                action.value = result.toActionState("Automatisch bijgewerkt")
             }
         }
     }
@@ -79,7 +97,7 @@ class StreamGuideViewModel(application: Application) : AndroidViewModel(applicat
         combine(now, programs) { currentTime, programList -> ProgramSnapshot(currentTime, programList) }
     }
 
-    private val contentState = combine(
+    private val contentStateBase = combine(
         playlistDao.observeAll(),
         baseChannels,
         programSnapshot,
@@ -100,8 +118,28 @@ class StreamGuideViewModel(application: Application) : AndroidViewModel(applicat
         )
     }
 
+    private val guidePrograms = guideDayStart.flatMapLatest { dayStart ->
+        programDao.observeWindow(dayStart, dayStart + ONE_DAY - 1L)
+    }
+
+    private val guideRows = combine(channelDao.observeAll(), guidePrograms) { channels, programs ->
+        buildGuideRows(channels, programs)
+    }
+
+    private val contentState = combine(contentStateBase, guideRows, guideDayStart) { content, rows, dayStart ->
+        content.copy(guideRows = rows, guideDayStart = dayStart)
+    }
+
     private val contentWithSettings = combine(contentState, settingsRepository.settings) { content, settings ->
-        content.copy(settings = settings)
+        val visibleRows = content.channelRows.filter { isGroupVisible(it.channel.groupTitle, settings.hiddenGroups) }
+        content.copy(
+            channelRows = visibleRows,
+            channels = visibleRows.map { it.channel },
+            guideRows = content.guideRows.filter { isGroupVisible(it.channel.groupTitle, settings.hiddenGroups) },
+            allGroups = content.groups,
+            groups = content.groups.filter { isGroupVisible(it, settings.hiddenGroups) },
+            settings = settings
+        )
     }
 
     val state = combine(contentWithSettings, action) { content, actionState ->
@@ -133,6 +171,7 @@ class StreamGuideViewModel(application: Application) : AndroidViewModel(applicat
         showFavorites.value = false
         showRecent.value = false
     }
+    fun selectGuideDay(dayStart: Long) { guideDayStart.value = dayStart }
     fun clearMessage() { action.value = ActionState() }
 
     fun importPlaylist(name: String, url: String, epgUrl: String = "") {
@@ -192,33 +231,9 @@ class StreamGuideViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
-    fun syncFirstPlaylist() {
-        viewModelScope.launch {
-            val playlist = playlistDao.getAllOnce().firstOrNull()
-            if (playlist == null) {
-                action.value = ActionState(error = "Geen playlist gevonden.")
-                return@launch
-            }
-            action.value = ActionState(isLoading = true, message = "Synchroniseren")
-            runCatching { importResult(playlist.id) }
-                .onSuccess { action.value = it.toActionState(prefix = "Bijgewerkt") }
-                .onFailure { action.value = ActionState(error = it.message ?: "Sync mislukt") }
-        }
-    }
+    fun syncAllPlaylists() = launchSync(syncPlaylists = true, syncEpg = false, label = "Playlists synchroniseren")
 
-    fun syncEpgFirstPlaylist() {
-        viewModelScope.launch {
-            val playlist = playlistDao.getAllOnce().firstOrNull()
-            if (playlist == null) {
-                action.value = ActionState(error = "Geen playlist gevonden.")
-                return@launch
-            }
-            action.value = ActionState(isLoading = true, message = "EPG synchroniseren")
-            runCatching { syncEpgForPlaylist(playlist.id) }
-                .onSuccess { count -> action.value = ActionState(message = "$count programma's geladen") }
-                .onFailure { action.value = ActionState(error = it.message ?: "EPG sync mislukt") }
-        }
-    }
+    fun syncAllEpg() = launchSync(syncPlaylists = false, syncEpg = true, label = "EPG synchroniseren")
 
     fun deletePlaylist(id: Long) {
         viewModelScope.launch { playlistDao.delete(id) }
@@ -248,11 +263,66 @@ class StreamGuideViewModel(application: Application) : AndroidViewModel(applicat
         viewModelScope.launch { settingsRepository.setHardwareDecoding(value) }
     }
 
+    fun setSyncPlaylistsOnStart(value: Boolean) {
+        viewModelScope.launch { settingsRepository.setSyncPlaylistsOnStart(value) }
+    }
+
+    fun setSyncEpgOnStart(value: Boolean) {
+        viewModelScope.launch { settingsRepository.setSyncEpgOnStart(value) }
+    }
+
+    fun setGroupVisible(group: String, visible: Boolean) {
+        if (!visible && selectedGroup.value.equals(group, ignoreCase = true)) showAllChannels()
+        viewModelScope.launch { settingsRepository.setGroupVisible(group, visible) }
+    }
+
+    fun showAllGroups() {
+        viewModelScope.launch { settingsRepository.showAllGroups() }
+    }
+
     suspend fun nextChannelId(currentId: Long, direction: Int): Long? = withContext(Dispatchers.IO) {
         val ids = channelDao.getChannelIds()
         if (ids.isEmpty()) return@withContext null
         val index = ids.indexOf(currentId).takeIf { it >= 0 } ?: return@withContext null
         ids[(index + direction + ids.size) % ids.size]
+    }
+
+    private fun launchSync(syncPlaylists: Boolean, syncEpg: Boolean, label: String) {
+        viewModelScope.launch {
+            val playlists = playlistDao.getAllOnce()
+            if (playlists.isEmpty()) {
+                action.value = ActionState(error = "Geen playlist gevonden.")
+                return@launch
+            }
+            action.value = ActionState(isLoading = true, message = label)
+            action.value = synchronizeAll(playlists, syncPlaylists, syncEpg).toActionState("Bijgewerkt")
+        }
+    }
+
+    private suspend fun synchronizeAll(
+        playlists: List<PlaylistEntity>,
+        syncPlaylists: Boolean,
+        syncEpg: Boolean
+    ): SyncSummary {
+        var channelCount = 0
+        var epgCount = 0
+        val failures = mutableListOf<String>()
+
+        playlists.forEachIndexed { index, playlist ->
+            if (syncPlaylists) {
+                action.update { it.copy(message = "${playlist.name}: zenders (${index + 1}/${playlists.size})") }
+                runCatching { syncPlaylist(playlist.id) }
+                    .onSuccess { channelCount += it }
+                    .onFailure { failures += "${playlist.name} zenders: ${it.message ?: "mislukt"}" }
+            }
+            if (syncEpg) {
+                action.update { it.copy(message = "${playlist.name}: EPG (${index + 1}/${playlists.size})") }
+                runCatching { syncEpgForPlaylist(playlist.id) }
+                    .onSuccess { epgCount += it }
+                    .onFailure { failures += "${playlist.name} EPG: ${it.message ?: "mislukt"}" }
+            }
+        }
+        return SyncSummary(channelCount, epgCount, failures)
     }
 
     private suspend fun importResult(playlistId: Long): ImportResult {
@@ -363,9 +433,9 @@ class StreamGuideViewModel(application: Application) : AndroidViewModel(applicat
         filter: ChannelFilters,
         currentTime: Long
     ): List<ChannelRowState> {
-        val programsByChannel = programs.groupBy { it.channelTvgId }
+        val programsByChannel = programs.groupBy { it.playlistId to it.channelTvgId }
         val rows = channels.map { channel ->
-            val channelPrograms = channel.tvgId?.let { programsByChannel[it] }.orEmpty()
+            val channelPrograms = channel.tvgId?.let { programsByChannel[channel.playlistId to it] }.orEmpty()
             val current = channelPrograms.firstOrNull { it.startTime <= currentTime && it.endTime > currentTime }
             val next = channelPrograms.firstOrNull { it.startTime > currentTime }
             ChannelRowState(
@@ -386,6 +456,20 @@ class StreamGuideViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 
+    private fun buildGuideRows(
+        channels: List<ChannelEntity>,
+        programs: List<ProgramEntity>
+    ): List<GuideChannelState> {
+        val programsByChannel = programs.groupBy { it.playlistId to it.channelTvgId }
+        return channels.mapNotNull { channel ->
+            val channelPrograms = channel.tvgId
+                ?.let { programsByChannel[channel.playlistId to it] }
+                .orEmpty()
+                .sortedBy { it.startTime }
+            channelPrograms.takeIf { it.isNotEmpty() }?.let { GuideChannelState(channel, it) }
+        }
+    }
+
     private fun ProgramEntity.progressAt(currentTime: Long): Float {
         val duration = (endTime - startTime).coerceAtLeast(1L)
         return ((currentTime - startTime).toFloat() / duration.toFloat()).coerceIn(0f, 1f)
@@ -395,6 +479,7 @@ class StreamGuideViewModel(application: Application) : AndroidViewModel(applicat
 
     private companion object {
         const val ONE_HOUR = 60L * 60L * 1000L
+        const val ONE_DAY = 24L * ONE_HOUR
         const val TWELVE_HOURS = 12L * ONE_HOUR
         const val THREE_DAYS = 3L * 24L * ONE_HOUR
         const val SEVEN_DAYS = 7L * 24L * ONE_HOUR
@@ -406,6 +491,9 @@ data class StreamGuideState(
     val channelRows: List<ChannelRowState> = emptyList(),
     val channels: List<ChannelEntity> = emptyList(),
     val groups: List<String> = emptyList(),
+    val allGroups: List<String> = emptyList(),
+    val guideRows: List<GuideChannelState> = emptyList(),
+    val guideDayStart: Long = startOfTodayMillis(),
     val query: String = "",
     val selectedGroup: String? = null,
     val showFavorites: Boolean = false,
@@ -422,6 +510,11 @@ data class ChannelRowState(
     val currentProgram: ProgramEntity?,
     val nextProgram: ProgramEntity?,
     val progress: Float
+)
+
+data class GuideChannelState(
+    val channel: ChannelEntity,
+    val programs: List<ProgramEntity>
 )
 
 private data class ChannelFilters(
@@ -451,8 +544,31 @@ private data class ImportResult(
     }
 }
 
+private data class SyncSummary(
+    val channelCount: Int,
+    val epgCount: Int,
+    val failures: List<String>
+) {
+    fun toActionState(prefix: String): ActionState {
+        val parts = buildList {
+            if (channelCount > 0) add("$channelCount zenders")
+            if (epgCount > 0) add("$epgCount programma's")
+        }
+        val message = if (parts.isEmpty()) prefix else "$prefix: ${parts.joinToString(" en ")}"
+        return ActionState(
+            message = message,
+            error = failures.takeIf { it.isNotEmpty() }?.joinToString(separator = "\n")
+        )
+    }
+}
+
 private data class ActionState(
     val isLoading: Boolean = false,
     val message: String? = null,
     val error: String? = null
 )
+
+private fun startOfTodayMillis(): Long = LocalDate.now()
+    .atStartOfDay(ZoneId.systemDefault())
+    .toInstant()
+    .toEpochMilli()

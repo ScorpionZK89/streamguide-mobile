@@ -15,6 +15,10 @@ StreamGuide Mobile is een originele Android IPTV-speler voor telefoons. De app l
 - XMLTV EPG URL import en koppeling via tvg-id
 - Automatische ingebouwde Xtream EPG via xmltv.php wanneer geen losse EPG-link is ingevuld
 - Favorieten, laatst bekeken, zoeken en categorieen
+- Instelbare playlist- en EPG-synchronisatie bij het starten van de app
+- Zendergroepen verbergen met een blijvend groepsfilter
+- Tv-gids met dagkeuze en programmadetails
+- Eigen donkere media-interface met compacte zendertegels en moderne playerbediening
 - Geen meegeleverde streams of illegale bronnen
 
 ## Testen
@@ -25,3 +29,7 @@ Open `C:\Users\Mark\Documents\Codex\streamguide-mobile` in Android Studio en kli
 2. Vul je eigen legale bron in.
 3. Voeg optioneel een XMLTV EPG URL toe. Bij Xtream mag je dit meestal leeg laten; de app probeert dan de ingebouwde gids.
 4. Controleer de tabs Zenders, Gids en Instellingen.
+
+## Verdere uitbreiding
+
+De code is voorbereid op verdere functies zoals Picture-in-Picture, catch-up wanneer de provider dit legaal ondersteunt, profielen, ouderlijk toezicht, externe spelers en tabletweergave. StreamGuide blijft een eigen product en kopieert geen merk, ontwerp of assets van andere IPTV-apps.
