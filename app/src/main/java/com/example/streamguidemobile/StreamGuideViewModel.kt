@@ -49,6 +49,7 @@ class StreamGuideViewModel(application: Application) : AndroidViewModel(applicat
     private val action = MutableStateFlow(ActionState())
     private val now = MutableStateFlow(System.currentTimeMillis())
     private val guideDayStart = MutableStateFlow(startOfTodayMillis())
+    private val guideQuery = MutableStateFlow("")
 
     init {
         viewModelScope.launch {
@@ -126,8 +127,22 @@ class StreamGuideViewModel(application: Application) : AndroidViewModel(applicat
         buildGuideRows(channels, programs)
     }
 
-    private val contentState = combine(contentStateBase, guideRows, guideDayStart) { content, rows, dayStart ->
-        content.copy(guideRows = rows, guideDayStart = dayStart)
+    private val guideSnapshot = combine(guideRows, guideQuery) { rows, queryValue ->
+        val cleanQuery = queryValue.trim()
+        val filteredRows = if (cleanQuery.isBlank()) rows else rows.filter { row ->
+            row.channel.name.contains(cleanQuery, ignoreCase = true) ||
+                row.channel.groupTitle.contains(cleanQuery, ignoreCase = true) ||
+                row.programs.any { program ->
+                    program.title.contains(cleanQuery, ignoreCase = true) ||
+                        program.category?.contains(cleanQuery, ignoreCase = true) == true ||
+                        program.description?.contains(cleanQuery, ignoreCase = true) == true
+                }
+        }
+        GuideSnapshot(filteredRows, cleanQuery)
+    }
+
+    private val contentState = combine(contentStateBase, guideSnapshot, guideDayStart) { content, guide, dayStart ->
+        content.copy(guideRows = guide.rows, guideDayStart = dayStart, guideQuery = guide.query)
     }
 
     private val contentWithSettings = combine(contentState, settingsRepository.settings) { content, settings ->
@@ -172,6 +187,7 @@ class StreamGuideViewModel(application: Application) : AndroidViewModel(applicat
         showRecent.value = false
     }
     fun selectGuideDay(dayStart: Long) { guideDayStart.value = dayStart }
+    fun updateGuideQuery(value: String) { guideQuery.value = value }
     fun clearMessage() { action.value = ActionState() }
 
     fun importPlaylist(name: String, url: String, epgUrl: String = "") {
@@ -278,6 +294,11 @@ class StreamGuideViewModel(application: Application) : AndroidViewModel(applicat
 
     fun showAllGroups() {
         viewModelScope.launch { settingsRepository.showAllGroups() }
+    }
+
+    fun hideAllGroups(groups: List<String>) {
+        showAllChannels()
+        viewModelScope.launch { settingsRepository.hideGroups(groups) }
     }
 
     suspend fun nextChannelId(currentId: Long, direction: Int): Long? = withContext(Dispatchers.IO) {
@@ -494,6 +515,7 @@ data class StreamGuideState(
     val allGroups: List<String> = emptyList(),
     val guideRows: List<GuideChannelState> = emptyList(),
     val guideDayStart: Long = startOfTodayMillis(),
+    val guideQuery: String = "",
     val query: String = "",
     val selectedGroup: String? = null,
     val showFavorites: Boolean = false,
@@ -527,6 +549,11 @@ private data class ChannelFilters(
 private data class ProgramSnapshot(
     val now: Long,
     val programs: List<ProgramEntity>
+)
+
+private data class GuideSnapshot(
+    val rows: List<GuideChannelState>,
+    val query: String
 )
 
 private data class ImportResult(

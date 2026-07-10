@@ -1,5 +1,8 @@
 package com.example.streamguidemobile
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -103,12 +106,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.VideoSize
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
@@ -335,9 +342,23 @@ private fun HomeScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    Column {
-                        Text("StreamGuide", style = MaterialTheme.typography.titleLarge)
-                        Text("MOBILE", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Surface(
+                            modifier = Modifier.size(34.dp),
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(Icons.Default.PlayArrow, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            }
+                        }
+                        Column(Modifier.padding(start = 10.dp)) {
+                            Row {
+                                Text("StreamGuide", style = MaterialTheme.typography.titleLarge)
+                                Text(" TV", style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.primary)
+                            }
+                            Text("MOBILE", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+                        }
                     }
                 },
                 actions = {
@@ -445,6 +466,7 @@ private fun ChannelListScreen(state: StreamGuideState, viewModel: StreamGuideVie
             hiddenGroups = state.settings.hiddenGroups,
             onGroupVisible = viewModel::setGroupVisible,
             onShowAll = viewModel::showAllGroups,
+            onHideAll = { viewModel.hideAllGroups(state.allGroups) },
             onDismiss = { showGroupFilter = false }
         )
     }
@@ -551,9 +573,9 @@ private fun ChannelRow(row: ChannelRowState, showLogos: Boolean, compact: Boolea
 }
 
 @Composable
-private fun ChannelLogo(channel: ChannelEntity, showLogos: Boolean) {
+private fun ChannelLogo(channel: ChannelEntity, showLogos: Boolean, size: Dp = 48.dp) {
     Box(
-        modifier = Modifier.size(48.dp).clip(RoundedCornerShape(6.dp)).background(MaterialTheme.colorScheme.surfaceVariant),
+        modifier = Modifier.size(size).clip(RoundedCornerShape(6.dp)).background(MaterialTheme.colorScheme.surfaceVariant),
         contentAlignment = Alignment.Center
     ) {
         if (showLogos && !channel.logoUrl.isNullOrBlank()) {
@@ -615,11 +637,20 @@ private fun EpgScreen(state: StreamGuideState, viewModel: StreamGuideViewModel, 
                 )
             }
         }
+        OutlinedTextField(
+            value = state.guideQuery,
+            onValueChange = viewModel::updateGuideQuery,
+            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+            placeholder = { Text("Zoek in tv-gids") },
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp),
+            singleLine = true,
+            shape = RoundedCornerShape(8.dp)
+        )
         StatusBlock(state)
         if (state.guideRows.isEmpty()) {
             EmptyState("Geen programma's gevonden voor deze dag. Synchroniseer de EPG bij Instellingen.")
         } else {
-            LazyColumn(contentPadding = PaddingValues(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            LazyColumn(contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 items(state.guideRows, key = { it.channel.id }) { row ->
                     EpgRow(
                         row = row,
@@ -654,19 +685,19 @@ private fun EpgRow(
     onProgramSelected: (ProgramEntity) -> Unit
 ) {
     var expanded by remember(row.channel.id, guideDayStart) { mutableStateOf(false) }
-    val visiblePrograms = if (expanded) row.programs else row.programs.take(4)
+    val visiblePrograms = if (expanded) row.programs else row.programs.take(2)
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
-        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(Modifier.padding(horizontal = 10.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                ChannelLogo(row.channel, showLogos = showLogos)
-                Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                ChannelLogo(row.channel, showLogos = showLogos, size = 36.dp)
+                Column(Modifier.weight(1f).padding(start = 8.dp)) {
                     Text(row.channel.name, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(row.channel.groupTitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(row.channel.groupTitle, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                 }
-                IconButton(onClick = { onOpen(row.channel) }) {
+                IconButton(onClick = { onOpen(row.channel) }, modifier = Modifier.size(40.dp)) {
                     Icon(Icons.Default.PlayArrow, contentDescription = "Zender afspelen", tint = MaterialTheme.colorScheme.primary)
                 }
             }
@@ -678,9 +709,9 @@ private fun EpgRow(
                     onClick = { onProgramSelected(program) }
                 )
             }
-            if (row.programs.size > 4) {
+            if (row.programs.size > 2) {
                 TextButton(onClick = { expanded = !expanded }, modifier = Modifier.align(Alignment.End)) {
-                    Text(if (expanded) "Minder tonen" else "Nog ${row.programs.size - 4} programma's")
+                    Text(if (expanded) "Minder tonen" else "Nog ${row.programs.size - 2} programma's")
                 }
             }
         }
@@ -690,21 +721,21 @@ private fun EpgRow(
 @Composable
 private fun ProgramLine(program: ProgramEntity, isCurrent: Boolean, onClick: () -> Unit) {
     Row(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 4.dp),
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick).padding(vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Column(Modifier.width(68.dp)) {
+        Column(Modifier.width(54.dp)) {
             Text(
                 if (isCurrent) "NU" else formatTime(program.startTime),
                 style = MaterialTheme.typography.labelMedium,
                 color = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.secondary
             )
-            Text(formatTime(program.endTime), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(formatTime(program.endTime), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Column(Modifier.weight(1f)) {
-            Text(program.title, fontWeight = FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(program.title, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             program.category?.takeIf { it.isNotBlank() }?.let {
-                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
             }
         }
     }
@@ -851,6 +882,7 @@ private fun SettingsScreen(state: StreamGuideState, viewModel: StreamGuideViewMo
             hiddenGroups = state.settings.hiddenGroups,
             onGroupVisible = viewModel::setGroupVisible,
             onShowAll = viewModel::showAllGroups,
+            onHideAll = { viewModel.hideAllGroups(state.allGroups) },
             onDismiss = { showGroupFilter = false }
         )
     }
@@ -889,6 +921,7 @@ private fun GroupVisibilityDialog(
     hiddenGroups: Set<String>,
     onGroupVisible: (String, Boolean) -> Unit,
     onShowAll: () -> Unit,
+    onHideAll: () -> Unit,
     onDismiss: () -> Unit
 ) {
     AlertDialog(
@@ -925,13 +958,19 @@ private fun GroupVisibilityDialog(
                 Text("Klaar")
             }
         },
-        dismissButton = { TextButton(onClick = onShowAll) { Text("Alles tonen") } }
+        dismissButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                TextButton(onClick = onShowAll) { Text("Alles tonen") }
+                TextButton(onClick = onHideAll) { Text("Alles verbergen") }
+            }
+        }
     )
 }
 
 @Composable
 private fun PlayerScreen(channel: ChannelEntity, state: StreamGuideState, viewModel: StreamGuideViewModel, onBack: () -> Unit, onOpenChannel: (ChannelEntity) -> Unit) {
     val context = LocalContext.current
+    val activity = remember(context) { context.findActivity() }
     val scope = rememberCoroutineScope()
     val row = state.channelRows.firstOrNull { it.channel.id == channel.id }
     var muted by remember(channel.id) { mutableStateOf(false) }
@@ -940,6 +979,7 @@ private fun PlayerScreen(channel: ChannelEntity, state: StreamGuideState, viewMo
     var isBuffering by remember(channel.id) { mutableStateOf(false) }
     var playerError by remember(channel.id) { mutableStateOf<String?>(null) }
     var resizeMode by remember(channel.id) { mutableIntStateOf(AspectRatioFrameLayout.RESIZE_MODE_FIT) }
+    var streamQuality by remember(channel.id) { mutableStateOf<String?>(null) }
     val player = remember(channel.id) {
         ExoPlayer.Builder(context).build().apply {
             setMediaItem(MediaItem.fromUri(channel.streamUrl))
@@ -948,6 +988,14 @@ private fun PlayerScreen(channel: ChannelEntity, state: StreamGuideState, viewMo
         }
     }
     player.volume = if (muted) 0f else 1f
+
+    DisposableEffect(activity) {
+        val controller = activity?.window?.let { window -> WindowInsetsControllerCompat(window, window.decorView) }
+        val systemBars = WindowInsetsCompat.Type.systemBars()
+        controller?.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        controller?.hide(systemBars)
+        onDispose { controller?.show(systemBars) }
+    }
 
     LaunchedEffect(controlsVisible, playerError) {
         if (controlsVisible && playerError == null) {
@@ -964,6 +1012,13 @@ private fun PlayerScreen(channel: ChannelEntity, state: StreamGuideState, viewMo
 
             override fun onPlaybackStateChanged(playbackState: Int) {
                 isBuffering = playbackState == Player.STATE_BUFFERING
+                if (playbackState == Player.STATE_READY) {
+                    streamQuality = qualityLabel(player.videoSize)
+                }
+            }
+
+            override fun onVideoSizeChanged(videoSize: VideoSize) {
+                streamQuality = qualityLabel(videoSize)
             }
 
             override fun onPlayerError(error: PlaybackException) {
@@ -1021,6 +1076,10 @@ private fun PlayerScreen(channel: ChannelEntity, state: StreamGuideState, viewMo
                             overflow = TextOverflow.Ellipsis
                         )
                         Text(formatTime(System.currentTimeMillis()), color = Color.White)
+                        streamQuality?.let {
+                            Spacer(Modifier.size(8.dp))
+                            StreamQualityBadge(it)
+                        }
                     }
                     row?.currentProgram?.let { Text(it.title, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis) }
                     row?.nextProgram?.let { Text("Straks: ${it.title}", color = Color.White.copy(alpha = 0.78f), maxLines = 1, overflow = TextOverflow.Ellipsis) }
@@ -1091,6 +1150,22 @@ private fun PlayerScreen(channel: ChannelEntity, state: StreamGuideState, viewMo
 }
 
 @Composable
+private fun StreamQualityBadge(label: String) {
+    Surface(
+        shape = RoundedCornerShape(5.dp),
+        color = MaterialTheme.colorScheme.primary,
+        contentColor = MaterialTheme.colorScheme.onPrimary
+    ) {
+        Text(
+            label,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.Bold
+        )
+    }
+}
+
+@Composable
 private fun PlayerControl(icon: ImageVector, label: String, onClick: () -> Unit) {
     Column(Modifier.width(64.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         IconButton(onClick = onClick) {
@@ -1121,6 +1196,21 @@ private fun StatusBlock(state: StreamGuideState) {
 }
 
 private fun formatTime(timestamp: Long): String = timeFormatter.format(Instant.ofEpochMilli(timestamp))
+
+private fun qualityLabel(videoSize: VideoSize): String? = when (videoSize.height) {
+    in 2160..Int.MAX_VALUE -> "4K UHD"
+    in 1440..2159 -> "1440p"
+    in 1080..1439 -> "1080p"
+    in 720..1079 -> "720p HD"
+    in 1..719 -> "${videoSize.height}p"
+    else -> null
+}
+
+private tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
+}
 
 private fun dayStartMillis(day: LocalDate): Long = day
     .atStartOfDay(ZoneId.systemDefault())

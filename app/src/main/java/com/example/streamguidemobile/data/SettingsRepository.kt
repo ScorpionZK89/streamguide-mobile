@@ -69,6 +69,14 @@ class SettingsRepository(private val context: Context) {
         context.streamGuideSettings.edit { it.remove(Keys.hiddenGroups) }
     }
 
+    suspend fun hideGroups(groups: Collection<String>) {
+        context.streamGuideSettings.edit { preferences ->
+            val hidden = preferences[Keys.hiddenGroups].orEmpty().toMutableSet()
+            hidden += groups.map { it.trim() }.filter { it.isNotEmpty() }
+            preferences[Keys.hiddenGroups] = hidden
+        }
+    }
+
     private object Keys {
         val showLogos = booleanPreferencesKey("show_logos")
         val compactList = booleanPreferencesKey("compact_list")
