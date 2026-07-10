@@ -8,3 +8,4 @@ app/build/
 outputs/
 work/
 .local-gradle/
+gradle/gradle-daemon-jvm.properties
