@@ -1,11 +1,13 @@
 package com.example.streamguidemobile
 
 import android.app.Activity
+import android.app.PictureInPictureParams
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.util.Rational
 import android.view.ViewGroup
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -50,6 +52,7 @@ import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PictureInPictureAlt
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
@@ -134,6 +137,8 @@ import java.util.Locale
 
 class MainActivity : ComponentActivity() {
     private val viewModel by viewModels<StreamGuideViewModel>()
+    private var enterPictureInPicture: (() -> Unit)? = null
+    private var pictureInPictureModeChanged: ((Boolean) -> Unit)? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -143,6 +148,27 @@ class MainActivity : ComponentActivity() {
                 StreamGuideApp(viewModel)
             }
         }
+    }
+
+    fun setPictureInPictureCallbacks(
+        enter: (() -> Unit)?,
+        onModeChanged: ((Boolean) -> Unit)?
+    ) {
+        enterPictureInPicture = enter
+        pictureInPictureModeChanged = onModeChanged
+    }
+
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        enterPictureInPicture?.invoke()
+    }
+
+    override fun onPictureInPictureModeChanged(
+        isInPictureInPictureMode: Boolean,
+        newConfig: android.content.res.Configuration
+    ) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        pictureInPictureModeChanged?.invoke(isInPictureInPictureMode)
     }
 }
 
@@ -529,6 +555,7 @@ private fun ContinueWatchingCard(row: ChannelRowState, onOpen: (ChannelEntity) -
             }
         }
     }
+
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -673,6 +700,7 @@ private fun EpgScreen(state: StreamGuideState, viewModel: StreamGuideViewModel, 
             onDismiss = { selectedProgram = null }
         )
     }
+
 }
 
 @Composable
@@ -988,6 +1016,18 @@ private fun PlayerScreen(channel: ChannelEntity, state: StreamGuideState, viewMo
         }
     }
     player.volume = if (muted) 0f else 1f
+    val enterPip = remember(activity, player) {
+        {
+            val playerActivity = activity
+            if (playerActivity != null && !playerActivity.isInPictureInPictureMode) {
+                playerActivity.enterPictureInPictureMode(
+                    PictureInPictureParams.Builder()
+                        .setAspectRatio(player.videoSize.pipAspectRatio())
+                        .build()
+                )
+            }
+        }
+    }
 
     DisposableEffect(activity) {
         val controller = activity?.window?.let { window -> WindowInsetsControllerCompat(window, window.decorView) }
@@ -995,6 +1035,16 @@ private fun PlayerScreen(channel: ChannelEntity, state: StreamGuideState, viewMo
         controller?.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         controller?.hide(systemBars)
         onDispose { controller?.show(systemBars) }
+    }
+
+    DisposableEffect(activity, enterPip) {
+        (activity as? MainActivity)?.setPictureInPictureCallbacks(
+            enter = enterPip,
+            onModeChanged = { isInPip -> controlsVisible = !isInPip }
+        )
+        onDispose {
+            (activity as? MainActivity)?.setPictureInPictureCallbacks(null, null)
+        }
     }
 
     LaunchedEffect(controlsVisible, playerError) {
@@ -1106,6 +1156,9 @@ private fun PlayerScreen(channel: ChannelEntity, state: StreamGuideState, viewMo
                         controlsVisible = true
                         muted = !muted
                     }
+                    PlayerControl(Icons.Default.PictureInPictureAlt, "Mini-speler") {
+                        enterPip()
+                    }
                     PlayerControl(Icons.Default.AspectRatio, resizeLabel(resizeMode)) {
                         controlsVisible = true
                         resizeMode = when (resizeMode) {
@@ -1204,6 +1257,12 @@ private fun qualityLabel(videoSize: VideoSize): String? = when (videoSize.height
     in 720..1079 -> "720p HD"
     in 1..719 -> "${videoSize.height}p"
     else -> null
+}
+
+private fun VideoSize.pipAspectRatio(): Rational {
+    val width = width.coerceAtLeast(16)
+    val height = height.coerceAtLeast(9)
+    return Rational(width, height)
 }
 
 private tailrec fun Context.findActivity(): Activity? = when (this) {
