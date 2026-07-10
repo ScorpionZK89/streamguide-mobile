@@ -1,4 +1,4 @@
-﻿package com.example.streamguidemobile.data
+package com.example.streamguidemobile.data
 
 import android.content.Context
 import androidx.room.Dao

@@ -1,4 +1,4 @@
-﻿package com.example.streamguidemobile
+package com.example.streamguidemobile
 
 import android.os.Bundle
 import android.view.ViewGroup

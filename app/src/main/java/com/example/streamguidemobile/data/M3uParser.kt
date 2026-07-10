@@ -1,4 +1,4 @@
-﻿package com.example.streamguidemobile.data
+package com.example.streamguidemobile.data
 
 import java.io.BufferedReader
 import java.io.Reader

@@ -1,4 +1,4 @@
-﻿# StreamGuide Mobile
+# StreamGuide Mobile
 
 StreamGuide Mobile is een originele Android IPTV-speler voor telefoons. De app levert geen zenders, streams, playlists of piraterijcontent mee. Gebruikers voegen zelf een legale M3U-playlist toe.
 

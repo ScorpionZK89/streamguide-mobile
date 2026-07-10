@@ -1,4 +1,4 @@
-﻿package com.example.streamguidemobile.data
+package com.example.streamguidemobile.data
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull

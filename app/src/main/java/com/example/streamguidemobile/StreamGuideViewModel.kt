@@ -1,4 +1,4 @@
-﻿package com.example.streamguidemobile
+package com.example.streamguidemobile
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
