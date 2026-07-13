@@ -3,6 +3,7 @@
 package com.example.streamguidemobile.playback
 
 import android.content.Context
+import android.util.Log
 import androidx.annotation.MainThread
 import androidx.media3.cast.CastPlayer
 import androidx.media3.cast.SessionAvailabilityListener
@@ -42,10 +43,27 @@ class PlaybackCoordinator(context: Context) {
     private val _state = MutableStateFlow(PlaybackCoordinatorState())
     val state: StateFlow<PlaybackCoordinatorState> = _state.asStateFlow()
 
-    // Media3 1.5.1 requires an eagerly available CastContext for CastPlayer construction.
-    @Suppress("DEPRECATION")
-    private val castContext: CastContext? = runCatching { CastContext.getSharedInstance(appContext) }.getOrNull()
-    private val castPlayer: CastPlayer? = castContext?.let { CastPlayer(appContext, it, androidx.media3.cast.DefaultMediaItemConverter(), 10_000L, 10_000L, 3_000L) }
+    // Some devices can expose the Cast framework while its runtime is unavailable or outdated.
+    // Keep that optional integration from taking down local playback and the content libraries.
+    private val castRuntime: CastRuntime? = runCatching {
+        @Suppress("DEPRECATION")
+        val context = CastContext.getSharedInstance(appContext)
+        CastRuntime(
+            context = context,
+            player = CastPlayer(
+                appContext,
+                context,
+                androidx.media3.cast.DefaultMediaItemConverter(),
+                10_000L,
+                10_000L,
+                3_000L
+            )
+        )
+    }.onFailure { error ->
+        Log.w(TAG, "Google Cast runtime is unavailable; local playback remains enabled.", error)
+    }.getOrNull()
+    private val castContext: CastContext? = castRuntime?.context
+    private val castPlayer: CastPlayer? = castRuntime?.player
     private var localPlayer: ExoPlayer? = null
     private var localListener: Player.Listener? = null
     private var localMedia: PlaybackMedia? = null
@@ -181,6 +199,14 @@ class PlaybackCoordinator(context: Context) {
         localPlayer?.let { existing ->
             if (localMedia?.mediaId == media.mediaId) return existing
             releaseLocalEndpoint(existing)
+            // Compose can request the replacement before disposing the previous player effect.
+            // Complete the old local lifecycle before starting the new stream.
+            if (_state.value.status in localStatuses) {
+                transition(
+                    PlaybackCoordinatorStatus.STOPPED,
+                    PlaybackCoordinatorState(localPlaybackAuthorized = true)
+                )
+            }
         }
 
         pendingMedia = media
@@ -221,8 +247,8 @@ class PlaybackCoordinator(context: Context) {
         localPlayer = player
         localListener = listener
         player.addListener(listener)
-        if (media.isLive) player.setMediaItem(media.toMediaItem())
-        else player.setMediaItem(media.toMediaItem(), media.startPositionMs.coerceAtLeast(0L))
+        if (media.isLive) player.setMediaItem(media.toLocalMediaItem())
+        else player.setMediaItem(media.toLocalMediaItem(), media.startPositionMs.coerceAtLeast(0L))
         player.prepare()
         player.playWhenReady = media.playWhenReady
         return player
@@ -445,8 +471,8 @@ class PlaybackCoordinator(context: Context) {
                 )
             )
             applyPreferredLanguages(remotePlayer, media)
-            if (media.isLive) remotePlayer.setMediaItem(media.toMediaItem())
-            else remotePlayer.setMediaItem(media.toMediaItem(), media.startPositionMs.coerceAtLeast(0L))
+            if (media.isLive) remotePlayer.setMediaItem(media.toCastMediaItem())
+            else remotePlayer.setMediaItem(media.toCastMediaItem(), media.startPositionMs.coerceAtLeast(0L))
             remotePlayer.prepare()
             remotePlayer.playWhenReady = media.playWhenReady
 
@@ -662,7 +688,13 @@ class PlaybackCoordinator(context: Context) {
 
     private enum class SessionEndPurpose { NONE, CONTINUE_LOCAL, STOP, DISCONNECT }
 
+    private data class CastRuntime(
+        val context: CastContext,
+        val player: CastPlayer
+    )
+
     private companion object {
+        const val TAG = "PlaybackCoordinator"
         val localStatuses = setOf(PlaybackCoordinatorStatus.LOCAL_STARTING, PlaybackCoordinatorStatus.LOCAL_PLAYBACK)
         val castOnlyStatuses = setOf(PlaybackCoordinatorStatus.CAST_STARTING, PlaybackCoordinatorStatus.CAST_PLAYBACK)
         const val CAST_SWITCH_DEBOUNCE_MS = 350L

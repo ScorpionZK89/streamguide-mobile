@@ -7,6 +7,22 @@ import org.junit.Test
 
 class PlaybackTransitionRulesTest {
     @Test
+    fun replacingLocalMediaStopsOldEndpointBeforeStartingNewEndpoint() {
+        assertTrue(
+            PlaybackTransitionRules.canTransition(
+                PlaybackCoordinatorStatus.LOCAL_PLAYBACK,
+                PlaybackCoordinatorStatus.STOPPED
+            )
+        )
+        assertTrue(
+            PlaybackTransitionRules.canTransition(
+                PlaybackCoordinatorStatus.STOPPED,
+                PlaybackCoordinatorStatus.LOCAL_STARTING
+            )
+        )
+    }
+
+    @Test
     fun `local to cast must pass through transfer state`() {
         assertFalse(
             PlaybackTransitionRules.canTransition(

@@ -70,8 +70,11 @@ import java.time.ZoneId
 
 @OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
 class StreamGuideViewModel(application: Application) : AndroidViewModel(application) {
-    val playbackCoordinator = PlaybackCoordinator(application)
-    val playbackState = playbackCoordinator.state
+    // Build the database-backed app state first. Cast is optional and only initialized when the
+    // UI starts observing playback, so a device-specific Cast problem cannot block the libraries.
+    private val playbackCoordinatorDelegate = lazy(LazyThreadSafetyMode.NONE) { PlaybackCoordinator(application) }
+    val playbackCoordinator: PlaybackCoordinator get() = playbackCoordinatorDelegate.value
+    val playbackState get() = playbackCoordinator.state
     private val database = StreamGuideDatabase.get(application)
     private val playlistDao = database.playlistDao()
     private val channelDao = database.channelDao()
@@ -133,7 +136,7 @@ class StreamGuideViewModel(application: Application) : AndroidViewModel(applicat
     }
 
     override fun onCleared() {
-        playbackCoordinator.release()
+        if (playbackCoordinatorDelegate.isInitialized()) playbackCoordinator.release()
         super.onCleared()
     }
 

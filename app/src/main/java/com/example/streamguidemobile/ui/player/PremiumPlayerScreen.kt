@@ -434,7 +434,7 @@ fun PremiumPlayerScreen(
         playerFailure = null
         playbackState = Player.STATE_BUFFERING
         revealControls()
-        player.setMediaItem(playbackMedia.toMediaItem())
+        player.setMediaItem(playbackMedia.toLocalMediaItem())
         player.prepare()
         player.playWhenReady = true
     }

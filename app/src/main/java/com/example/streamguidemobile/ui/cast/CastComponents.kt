@@ -51,6 +51,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.mediarouter.app.MediaRouteButton
+import android.view.View
 import coil.compose.AsyncImage
 import com.example.streamguidemobile.playback.CastTrack
 import com.example.streamguidemobile.playback.PlaybackContentType
@@ -66,9 +67,15 @@ fun CastRouteButton(modifier: Modifier = Modifier) {
     AndroidView(
         modifier = modifier.size(46.dp),
         factory = { context ->
-            MediaRouteButton(context).apply {
-                contentDescription = "Afspelen op Chromecast"
-                runCatching { CastButtonFactory.setUpMediaRouteButton(context, this) }
+            runCatching {
+                MediaRouteButton(context).apply {
+                    contentDescription = "Afspelen op Chromecast"
+                    CastButtonFactory.setUpMediaRouteButton(context, this)
+                }
+            }.getOrElse {
+                // Cast is optional. An unavailable Play Services/MediaRouter runtime must not
+                // crash detail screens or hide the movie and series libraries.
+                View(context).apply { visibility = View.INVISIBLE }
             }
         }
     )

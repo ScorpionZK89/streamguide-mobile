@@ -47,7 +47,13 @@ data class PlaybackMedia(
         selectedSubtitleLanguage = snapshot.selectedSubtitleLanguage
     )
 
-    fun toMediaItem(): MediaItem {
+    /** Lets ExoPlayer inspect the response just as it did before Cast support was added. */
+    fun toLocalMediaItem(): MediaItem = buildMediaItem(includeInferredMimeType = false)
+
+    /** Gives the Cast receiver an explicit content type because it cannot sniff through the sender. */
+    fun toCastMediaItem(): MediaItem = buildMediaItem(includeInferredMimeType = true)
+
+    private fun buildMediaItem(includeInferredMimeType: Boolean): MediaItem {
         val metadata = MediaMetadata.Builder()
             .setTitle(title)
             .setSubtitle(subtitle)
@@ -63,7 +69,9 @@ data class PlaybackMedia(
         return MediaItem.Builder()
             .setMediaId(mediaId)
             .setUri(streamUrl)
-            .setMimeType(streamMimeType(streamUrl))
+            .apply {
+                if (includeInferredMimeType) setMimeType(streamMimeType(streamUrl))
+            }
             .setMediaMetadata(metadata)
             .build()
     }
