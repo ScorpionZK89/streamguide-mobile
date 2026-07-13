@@ -5,4 +5,9 @@
         <item name="android:fontFamily">sans</item>
         <item name="android:colorAccent">#72D6C9</item>
     </style>
+
+    <style name="ThemeOverlay.StreamGuideMobile.CastButton" parent="Theme.MediaRouter">
+        <item name="colorControlNormal">#FFFFFFFF</item>
+        <item name="mediaRouteButtonTint">#FFFFFFFF</item>
+    </style>
 </resources>

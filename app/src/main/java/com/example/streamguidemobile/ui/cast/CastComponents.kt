@@ -1,5 +1,9 @@
 package com.example.streamguidemobile.ui.cast
 
+import android.util.Log
+import android.view.ContextThemeWrapper
+import android.widget.ImageButton
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -51,7 +55,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.mediarouter.app.MediaRouteButton
-import android.view.View
+import com.example.streamguidemobile.R
 import coil.compose.AsyncImage
 import com.example.streamguidemobile.playback.CastTrack
 import com.example.streamguidemobile.playback.PlaybackContentType
@@ -67,19 +71,32 @@ fun CastRouteButton(modifier: Modifier = Modifier) {
     AndroidView(
         modifier = modifier.size(46.dp),
         factory = { context ->
+            val themedContext = ContextThemeWrapper(context, R.style.ThemeOverlay_StreamGuideMobile_CastButton)
             runCatching {
-                MediaRouteButton(context).apply {
+                MediaRouteButton(themedContext).apply {
                     contentDescription = "Afspelen op Chromecast"
                     CastButtonFactory.setUpMediaRouteButton(context, this)
                 }
-            }.getOrElse {
-                // Cast is optional. An unavailable Play Services/MediaRouter runtime must not
-                // crash detail screens or hide the movie and series libraries.
-                View(context).apply { visibility = View.INVISIBLE }
+            }.getOrElse { error ->
+                Log.w(CAST_UI_TAG, "Google Cast button setup failed.", error)
+                ImageButton(themedContext).apply {
+                    setImageResource(androidx.mediarouter.R.drawable.mr_button_dark_static)
+                    background = null
+                    contentDescription = "Google Cast niet beschikbaar"
+                    setOnClickListener {
+                        Toast.makeText(
+                            context,
+                            "Google Cast is niet beschikbaar. Controleer wifi en Google Play-services.",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+                }
             }
         }
     )
 }
+
+private const val CAST_UI_TAG = "CastRouteButton"
 
 @Composable
 fun CastPlaybackScreen(
