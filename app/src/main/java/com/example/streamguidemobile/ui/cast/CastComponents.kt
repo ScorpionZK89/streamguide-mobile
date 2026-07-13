@@ -53,7 +53,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.core.content.ContextCompat
 import androidx.mediarouter.app.MediaRouteButton
 import com.example.streamguidemobile.R
 import coil.compose.AsyncImage
@@ -75,11 +74,8 @@ fun CastRouteButton(modifier: Modifier = Modifier) {
             MediaRouteButton(themedContext).apply {
                 contentDescription = "Afspelen op Chromecast"
                 runCatching {
-                    CastButtonFactory.setUpMediaRouteButton(
-                        context,
-                        ContextCompat.getMainExecutor(context),
-                        this
-                    ).addOnFailureListener { error -> configureCastFailure(context, error) }
+                    @Suppress("DEPRECATION")
+                    CastButtonFactory.setUpMediaRouteButton(context, this)
                 }.onFailure { error ->
                     configureCastFailure(context, error)
                 }
