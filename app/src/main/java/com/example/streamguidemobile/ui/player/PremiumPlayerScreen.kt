@@ -575,7 +575,7 @@ fun PremiumPlayerScreen(
             )
         }
 
-        if (upNextVisible && nextEpisode != null && series != null) {
+        if (upNextVisible && series != null) {
             MediaUpNextCard(
                 title = nextEpisode.title,
                 metadata = "${series.title} · ${nextEpisode.displayCode()}",
