@@ -98,6 +98,7 @@ fun ProgramGuideScreen(
     onDaySelected: (Long) -> Unit,
     onToggleFavorite: (ChannelEntity) -> Unit,
     onWatch: (ChannelEntity) -> Unit,
+    onPrepareCast: (ChannelEntity) -> Unit,
     onOpenLive: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -158,6 +159,7 @@ fun ProgramGuideScreen(
             qualityBadge = streamResolutionBadge(row.streamResolution)
         )
     }
+    LaunchedEffect(selected?.channel?.id) { selected?.channel?.let(onPrepareCast) }
 
     BoxWithConstraints(
         modifier = modifier.fillMaxSize().background(
@@ -691,6 +693,7 @@ private fun ProgramGuidePhonePreview() {
         onDaySelected = {},
         onToggleFavorite = {},
         onWatch = {},
+        onPrepareCast = {},
         onOpenLive = {}
     )
 }

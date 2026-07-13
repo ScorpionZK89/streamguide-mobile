@@ -52,6 +52,7 @@ fun LiveTvScreen(
     onGroupSelected: (String) -> Unit,
     onToggleFavorite: (ChannelRowState) -> Unit,
     onWatch: (ChannelRowState) -> Unit,
+    onPrepareCast: (ChannelRowState) -> Unit,
     onOpenGuide: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -81,6 +82,7 @@ fun LiveTvScreen(
     }
     val selectedRow = state.channelRows.firstOrNull { it.channel.id == selectedChannelId }
         ?: state.channelRows.firstOrNull()
+    LaunchedEffect(selectedRow?.channel?.id) { selectedRow?.let(onPrepareCast) }
 
     fun selectCategory(item: LiveCategoryItem) {
         when (item.key) {
@@ -315,6 +317,7 @@ private fun LiveTvPhonePreview() {
         onGroupSelected = {},
         onToggleFavorite = {},
         onWatch = {},
+        onPrepareCast = {},
         onOpenGuide = {}
     )
 }

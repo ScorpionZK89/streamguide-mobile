@@ -108,6 +108,13 @@ import com.example.streamguidemobile.data.MovieEntity
 import com.example.streamguidemobile.data.EpisodeEntity
 import com.example.streamguidemobile.data.asPlaybackChannel
 import com.example.streamguidemobile.data.nextPlayableEpisode
+import com.example.streamguidemobile.data.orderedEpisodes
+import com.example.streamguidemobile.playback.PlaybackContentType
+import com.example.streamguidemobile.playback.PlaybackCoordinatorState
+import com.example.streamguidemobile.playback.PlaybackCoordinatorStatus
+import com.example.streamguidemobile.playback.toLivePlaybackMedia
+import com.example.streamguidemobile.playback.toPlaybackMedia
+import com.example.streamguidemobile.ui.cast.CastPlaybackScreen
 import com.example.streamguidemobile.ui.theme.StreamGuideTheme
 import com.example.streamguidemobile.ui.home.CinematicHomeScreen
 import com.example.streamguidemobile.ui.guide.ProgramGuideScreen
@@ -217,6 +224,7 @@ class MainActivity : ComponentActivity() {
 private fun StreamGuideApp(viewModel: StreamGuideViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val appUpdateState by viewModel.appUpdateState.collectAsStateWithLifecycle()
+    val playbackState by viewModel.playbackState.collectAsStateWithLifecycle()
     val activity = LocalContext.current as? MainActivity
     var selectedChannel by remember { mutableStateOf<ChannelEntity?>(null) }
     var selectedMoviePlayback by remember { mutableStateOf<Pair<Long, Boolean>?>(null) }
@@ -232,6 +240,101 @@ private fun StreamGuideApp(viewModel: StreamGuideViewModel) {
         onInstall = { file -> activity?.requestUpdateInstallation(file) },
         onDismiss = viewModel::dismissAppUpdate
     )
+
+    val castMedia = playbackState.media
+    val showCastController = playbackState.isCasting ||
+        playbackState.status == PlaybackCoordinatorStatus.ERROR ||
+        (!playbackState.localPlaybackAuthorized && castMedia != null)
+    if (showCastController) {
+        val episode = castMedia?.takeIf { it.contentType == PlaybackContentType.EPISODE }
+            ?.let { media -> state.seriesLibrary.allEpisodes.firstOrNull { it.id == media.entityId } }
+        val seriesCard = episode?.let { current -> state.seriesLibrary.allSeries.firstOrNull { it.series.id == current.seriesId } }
+        val orderedEpisodes = seriesCard?.episodes?.orderedEpisodes().orEmpty().filter { !it.streamUrl.isNullOrBlank() }
+        val episodeIndex = episode?.let { current -> orderedEpisodes.indexOfFirst { it.id == current.id } } ?: -1
+        val liveChannels = state.homeRows.map { it.channel }.ifEmpty { state.channels }
+        val liveIndex = castMedia?.takeIf { it.contentType == PlaybackContentType.LIVE }
+            ?.let { media -> liveChannels.indexOfFirst { it.id == media.entityId } } ?: -1
+        val previousAction: (() -> Unit)? = when {
+            episodeIndex > 0 && seriesCard != null -> ({
+                viewModel.playbackCoordinator.playOnCastIfConnected(orderedEpisodes[episodeIndex - 1].toPlaybackMedia(seriesCard.series))
+            })
+            liveIndex >= 0 && liveChannels.size > 1 -> ({
+                val previous = liveChannels[(liveIndex - 1 + liveChannels.size) % liveChannels.size]
+                val program = state.homeRows.firstOrNull { it.channel.id == previous.id }?.currentProgram
+                viewModel.playbackCoordinator.playOnCastIfConnected(previous.toLivePlaybackMedia(program))
+            })
+            else -> null
+        }
+        val nextAction: (() -> Unit)? = when {
+            episodeIndex >= 0 && episodeIndex < orderedEpisodes.lastIndex && seriesCard != null -> ({
+                viewModel.playbackCoordinator.playOnCastIfConnected(orderedEpisodes[episodeIndex + 1].toPlaybackMedia(seriesCard.series))
+            })
+            liveIndex >= 0 && liveChannels.size > 1 -> ({
+                val next = liveChannels[(liveIndex + 1) % liveChannels.size]
+                val program = state.homeRows.firstOrNull { it.channel.id == next.id }?.currentProgram
+                viewModel.playbackCoordinator.playOnCastIfConnected(next.toLivePlaybackMedia(program))
+            })
+            else -> null
+        }
+
+        LaunchedEffect(castMedia?.mediaId, playbackState.status) {
+            if (castMedia == null || playbackState.status != PlaybackCoordinatorStatus.CAST_PLAYBACK) return@LaunchedEffect
+            while (true) {
+                kotlinx.coroutines.delay(5_000L)
+                persistCastProgress(viewModel, state, viewModel.playbackState.value)
+            }
+        }
+
+        var autoAdvanceTriggered by remember(castMedia?.mediaId) { mutableStateOf(false) }
+        LaunchedEffect(playbackState.positionMs, playbackState.durationMs, playbackState.status, nextAction) {
+            val nearEnd = playbackState.durationMs > 0L &&
+                playbackState.durationMs - playbackState.positionMs in 0L..1_000L
+            if (!autoAdvanceTriggered && nearEnd && episode != null && state.settings.autoPlayNextEpisode && nextAction != null) {
+                autoAdvanceTriggered = true
+                nextAction()
+            }
+        }
+
+        BackHandler { activity?.moveTaskToBack(true) }
+        CastPlaybackScreen(
+            state = playbackState,
+            onPlayPause = { if (playbackState.isPlaying) viewModel.playbackCoordinator.pause() else viewModel.playbackCoordinator.play() },
+            onSeek = viewModel.playbackCoordinator::seekTo,
+            onRetry = viewModel.playbackCoordinator::retryCast,
+            onContinueOnPhone = {
+                persistCastProgress(viewModel, state, viewModel.playbackState.value)
+                castMedia?.let { media ->
+                    when (media.contentType) {
+                        PlaybackContentType.LIVE -> selectedChannel = state.channels.firstOrNull { it.id == media.entityId }
+                        PlaybackContentType.MOVIE -> selectedMoviePlayback = media.entityId to false
+                        PlaybackContentType.EPISODE -> selectedEpisodePlayback = media.entityId to false
+                        PlaybackContentType.CATCH_UP -> Unit
+                    }
+                }
+                viewModel.playbackCoordinator.continueOnPhone()
+            },
+            onStopWatching = {
+                persistCastProgress(viewModel, state, viewModel.playbackState.value)
+                selectedChannel = null
+                selectedMoviePlayback = null
+                selectedEpisodePlayback = null
+                viewModel.playbackCoordinator.stopWatching()
+            },
+            onCancel = {
+                selectedChannel = null
+                selectedMoviePlayback = null
+                selectedEpisodePlayback = null
+                viewModel.playbackCoordinator.cancelCastError()
+            },
+            onPrevious = previousAction,
+            onNext = nextAction,
+            onSelectAudio = viewModel.playbackCoordinator::selectCastAudio,
+            onSelectSubtitle = viewModel.playbackCoordinator::selectCastSubtitle,
+            onDisableSubtitles = viewModel.playbackCoordinator::disableCastSubtitles,
+            onCloseAppKeepCasting = { activity?.finishAndRemoveTask() }
+        )
+        return
+    }
 
     selectedChannel?.let { channel ->
         PremiumPlayerScreen(
@@ -299,15 +402,42 @@ private fun StreamGuideApp(viewModel: StreamGuideViewModel) {
                 if (newDestination != AppDestination.Series) selectedSeriesId = null
             },
             onMovieSelected = { selectedMovieId = it },
-            onPlayMovie = { movie, restart -> selectedMoviePlayback = movie.id to restart },
+            onPlayMovie = { movie, restart ->
+                selectedMoviePlayback = movie.id to restart
+                viewModel.playbackCoordinator.playOnCastIfConnected(movie.toPlaybackMedia(restart))
+            },
             onSeriesSelected = { selectedSeriesId = it },
-            onPlayEpisode = { episode, restart -> selectedEpisodePlayback = episode.id to restart },
+            onPlayEpisode = { episode, restart ->
+                selectedEpisodePlayback = episode.id to restart
+                state.seriesLibrary.allSeries.firstOrNull { it.series.id == episode.seriesId }?.series?.let { series ->
+                    viewModel.playbackCoordinator.playOnCastIfConnected(episode.toPlaybackMedia(series, restart))
+                }
+            },
             onAddPlaylist = { showAddPlaylist = true },
             onOpen = { channel ->
                 viewModel.markWatched(channel)
                 selectedChannel = channel
+                val program = state.homeRows.firstOrNull { it.channel.id == channel.id }?.currentProgram
+                viewModel.playbackCoordinator.playOnCastIfConnected(channel.toLivePlaybackMedia(program))
             }
         )
+    }
+}
+
+private fun persistCastProgress(
+    viewModel: StreamGuideViewModel,
+    state: StreamGuideState,
+    playback: PlaybackCoordinatorState
+) {
+    val media = playback.media ?: return
+    when (media.contentType) {
+        PlaybackContentType.MOVIE -> state.movieLibrary.allMovies
+            .firstOrNull { it.id == media.entityId }
+            ?.let { viewModel.saveMovieProgress(it.id, playback.positionMs, playback.durationMs) }
+        PlaybackContentType.EPISODE -> state.seriesLibrary.allEpisodes
+            .firstOrNull { it.id == media.entityId }
+            ?.let { viewModel.saveEpisodeProgress(it.id, playback.positionMs, playback.durationMs) }
+        PlaybackContentType.LIVE, PlaybackContentType.CATCH_UP -> Unit
     }
 }
 
@@ -514,6 +644,9 @@ private fun HomeScreen(
                             onGroupSelected = viewModel::selectGroup,
                             onToggleFavorite = { viewModel.toggleFavorite(it.channel) },
                             onWatch = { onOpen(it.channel) },
+                            onPrepareCast = { row ->
+                                viewModel.playbackCoordinator.prepareCastCandidate(row.channel.toLivePlaybackMedia(row.currentProgram))
+                            },
                             onOpenGuide = { onDestinationChange(AppDestination.Guide) }
                         )
                         destination == AppDestination.Guide -> ProgramGuideScreen(
@@ -522,6 +655,9 @@ private fun HomeScreen(
                             onDaySelected = viewModel::selectGuideDay,
                             onToggleFavorite = viewModel::toggleFavorite,
                             onWatch = onOpen,
+                            onPrepareCast = { channel ->
+                                viewModel.playbackCoordinator.prepareCastCandidate(channel.toLivePlaybackMedia())
+                            },
                             onOpenLive = { onDestinationChange(AppDestination.Live) }
                         )
                         destination == AppDestination.Movies -> MoviesScreen(
@@ -536,6 +672,9 @@ private fun HomeScreen(
                             onToggleFavorite = viewModel::toggleMovieFavorite,
                             onLoadDetails = viewModel::loadMovieDetails,
                             onPlay = onPlayMovie,
+                            onPrepareCast = { movie ->
+                                viewModel.playbackCoordinator.prepareCastCandidate(movie.toPlaybackMedia())
+                            },
                             onSetWatched = viewModel::setMovieWatched,
                             onGroupVisible = viewModel::setMovieGroupVisible,
                             onShowAllGroups = viewModel::showAllMovieGroups,
@@ -548,6 +687,11 @@ private fun HomeScreen(
                             onFiltersChanged = viewModel::updateSeriesFilters, onClearFilters = viewModel::clearSeriesFilters,
                             onSortChanged = viewModel::updateSeriesSort, onToggleFavorite = viewModel::toggleSeriesFavorite,
                             onLoadDetails = viewModel::loadSeriesDetails, onPlayEpisode = onPlayEpisode,
+                            onPrepareCast = { episode ->
+                                state.seriesLibrary.allSeries.firstOrNull { it.series.id == episode.seriesId }?.series?.let { series ->
+                                    viewModel.playbackCoordinator.prepareCastCandidate(episode.toPlaybackMedia(series))
+                                }
+                            },
                             onSetEpisodeWatched = viewModel::setEpisodeWatched, onSetSeasonWatched = viewModel::setSeasonWatched,
                             onSetSeriesWatched = viewModel::setSeriesWatched, onClearProgress = viewModel::clearSeriesProgress,
                             onGroupVisible = viewModel::setSeriesGroupVisible,

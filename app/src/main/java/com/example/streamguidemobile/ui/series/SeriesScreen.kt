@@ -61,6 +61,7 @@ import com.example.streamguidemobile.data.SeriesEntity
 import com.example.streamguidemobile.data.displayCode
 import com.example.streamguidemobile.data.progressFraction
 import com.example.streamguidemobile.data.qualityBadge
+import com.example.streamguidemobile.ui.cast.CastRouteButton
 import com.example.streamguidemobile.ui.live.CinematicEmptyState
 import com.example.streamguidemobile.ui.live.CinematicIconAction
 import com.example.streamguidemobile.ui.live.CinematicSearchField
@@ -79,6 +80,7 @@ fun SeriesScreen(
     onToggleFavorite: (SeriesEntity) -> Unit,
     onLoadDetails: (Long, Boolean) -> Unit,
     onPlayEpisode: (EpisodeEntity, Boolean) -> Unit,
+    onPrepareCast: (EpisodeEntity) -> Unit,
     onSetEpisodeWatched: (EpisodeEntity, Boolean) -> Unit,
     onSetSeasonWatched: (Long, Int, Boolean) -> Unit,
     onSetSeriesWatched: (Long, Boolean) -> Unit,
@@ -103,6 +105,7 @@ fun SeriesScreen(
             card = selected, loading = library.detailLoading, error = library.error,
             onBack = { onSeriesSelected(null) }, onRetry = { onLoadDetails(selected.series.id, true) },
             onToggleFavorite = { onToggleFavorite(selected.series) }, onPlayEpisode = onPlayEpisode,
+            onPrepareCast = onPrepareCast,
             onSetEpisodeWatched = onSetEpisodeWatched, onSetSeasonWatched = onSetSeasonWatched,
             onSetSeriesWatched = onSetSeriesWatched, onClearProgress = onClearProgress, modifier = modifier
         )
@@ -405,8 +408,9 @@ private fun SeriesContinueCard(
     }
 }
 
-@Composable private fun SeriesDetailScreen(card: SeriesCardModel, loading: Boolean, error: String?, onBack: () -> Unit, onRetry: () -> Unit, onToggleFavorite: () -> Unit, onPlayEpisode: (EpisodeEntity, Boolean) -> Unit, onSetEpisodeWatched: (EpisodeEntity, Boolean) -> Unit, onSetSeasonWatched: (Long, Int, Boolean) -> Unit, onSetSeriesWatched: (Long, Boolean) -> Unit, onClearProgress: (Long) -> Unit, modifier: Modifier) {
+@Composable private fun SeriesDetailScreen(card: SeriesCardModel, loading: Boolean, error: String?, onBack: () -> Unit, onRetry: () -> Unit, onToggleFavorite: () -> Unit, onPlayEpisode: (EpisodeEntity, Boolean) -> Unit, onPrepareCast: (EpisodeEntity) -> Unit, onSetEpisodeWatched: (EpisodeEntity, Boolean) -> Unit, onSetSeasonWatched: (Long, Int, Boolean) -> Unit, onSetSeriesWatched: (Long, Boolean) -> Unit, onClearProgress: (Long) -> Unit, modifier: Modifier) {
     val seasons = remember(card.episodes) { card.orderedEpisodes.groupBy { it.seasonNumber } }
+    LaunchedEffect(card.primaryEpisode?.id) { card.primaryEpisode?.let(onPrepareCast) }
     var selectedSeason by rememberSaveable(card.series.id) { mutableIntStateOf(seasons.keys.firstOrNull() ?: 1) }
     LaunchedEffect(seasons.keys) { if (selectedSeason !in seasons.keys && seasons.isNotEmpty()) selectedSeason = seasons.keys.first() }
     var confirmation by remember { mutableStateOf<BulkSeriesAction?>(null) }
@@ -527,6 +531,7 @@ private fun SeriesSeasonSelector(
                 card.series.description?.let { Text(it, color = CinematicColors.TextSecondary, style = CinematicTypography.Body, maxLines = if (wide) 3 else 2, overflow = TextOverflow.Ellipsis) }
                 Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                     SeriesAction(card.actionLabel, Icons.Default.PlayArrow, true, onPlay)
+                    CastRouteButton(Modifier.size(34.dp))
                     SeriesIconButton(if (card.series.isFavorite) Icons.Default.Favorite else Icons.Outlined.FavoriteBorder, "Mijn lijst", card.series.isFavorite, onFavorite)
                 }
             }
@@ -859,7 +864,7 @@ private fun seriesPreviewData(): Pair<List<SeriesEntity>, List<EpisodeEntity>> {
             library = library,
             selectedSeriesId = selectedSeriesId,
             onSeriesSelected = {}, onQueryChange = {}, onCategorySelected = {}, onFiltersChanged = {}, onClearFilters = {}, onSortChanged = {},
-            onToggleFavorite = {}, onLoadDetails = { _, _ -> }, onPlayEpisode = { _, _ -> }, onSetEpisodeWatched = { _, _ -> },
+            onToggleFavorite = {}, onLoadDetails = { _, _ -> }, onPlayEpisode = { _, _ -> }, onPrepareCast = {}, onSetEpisodeWatched = { _, _ -> },
             onSetSeasonWatched = { _, _, _ -> }, onSetSeriesWatched = { _, _ -> }, onClearProgress = {}, onGroupVisible = { _, _ -> },
             onShowAllGroups = {}, onHideAllGroups = {}, onRetry = {}
         )

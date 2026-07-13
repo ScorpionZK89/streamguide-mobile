@@ -71,6 +71,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.streamguidemobile.data.ChannelEntity
 import com.example.streamguidemobile.data.ProgramEntity
+import com.example.streamguidemobile.ui.cast.CastRouteButton
 import com.example.streamguidemobile.ui.live.ChannelLogo
 import com.example.streamguidemobile.ui.theme.CinematicColors
 import com.example.streamguidemobile.ui.theme.CinematicTypography
@@ -174,6 +175,7 @@ internal fun PremiumPlayerTopBar(
         }
         quality?.let { PlayerBadge(it, CinematicColors.Gold) }
         Spacer(Modifier.width(5.dp))
+        CastRouteButton(Modifier.size(38.dp))
         PlayerIconButton(
             icon = if (isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
             description = if (isFavorite) "Uit favorieten" else "Aan favorieten",
@@ -220,6 +222,7 @@ internal fun PremiumMediaTopBar(
         }
         quality?.let { PlayerBadge(it, CinematicColors.Gold) }
         Spacer(Modifier.width(5.dp))
+        CastRouteButton(Modifier.size(38.dp))
         PlayerIconButton(Icons.Default.MoreVert, "Meer opties", onMore)
     }
 }

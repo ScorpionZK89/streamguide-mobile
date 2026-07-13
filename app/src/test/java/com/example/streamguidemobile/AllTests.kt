@@ -5,6 +5,7 @@ import com.example.streamguidemobile.data.M3uParserTest
 import com.example.streamguidemobile.data.MovieMetadataTest
 import com.example.streamguidemobile.data.SeriesMetadataTest
 import com.example.streamguidemobile.domain.GroupVisibilityTest
+import com.example.streamguidemobile.playback.PlaybackTransitionRulesTest
 import com.example.streamguidemobile.ui.guide.GuideTimelineTest
 import com.example.streamguidemobile.ui.home.HomeModelsTest
 import com.example.streamguidemobile.ui.live.LiveGuideComponentsTest
@@ -22,6 +23,7 @@ import org.junit.runners.Suite
     MovieMetadataTest::class,
     SeriesMetadataTest::class,
     GroupVisibilityTest::class,
+    PlaybackTransitionRulesTest::class,
     GuideTimelineTest::class,
     HomeModelsTest::class,
     LiveGuideComponentsTest::class,

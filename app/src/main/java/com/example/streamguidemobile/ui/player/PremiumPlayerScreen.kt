@@ -1,3 +1,5 @@
+@file:androidx.annotation.OptIn(markerClass = [androidx.media3.common.util.UnstableApi::class])
+
 package com.example.streamguidemobile.ui.player
 
 import android.app.Activity
@@ -62,6 +64,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -78,13 +81,11 @@ import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.media3.common.C
 import androidx.media3.common.Format
-import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.common.VideoSize
-import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.example.streamguidemobile.MainActivity
@@ -97,6 +98,8 @@ import com.example.streamguidemobile.data.SeriesEntity
 import com.example.streamguidemobile.data.displayCode
 import com.example.streamguidemobile.data.qualityBadge
 import com.example.streamguidemobile.data.streamResolutionBadge
+import com.example.streamguidemobile.playback.toLivePlaybackMedia
+import com.example.streamguidemobile.playback.toPlaybackMedia
 import com.example.streamguidemobile.ui.theme.CinematicColors
 import com.example.streamguidemobile.ui.theme.CinematicTypography
 import kotlinx.coroutines.delay
@@ -126,6 +129,15 @@ fun PremiumPlayerScreen(
         ?: state.channelRows.firstOrNull { it.channel.id == channel.id }
     val currentChannel = row?.channel ?: channel
     val isMedia = movie != null || episode != null
+    val coordinator = viewModel.playbackCoordinator
+    val coordinatorState by viewModel.playbackState.collectAsStateWithLifecycle()
+    val playbackMedia = remember(channel.id, movie?.id, episode?.id, series?.id, startFromBeginning, row?.currentProgram?.id) {
+        when {
+            movie != null -> movie.toPlaybackMedia(startFromBeginning)
+            episode != null && series != null -> episode.toPlaybackMedia(series, startFromBeginning)
+            else -> channel.toLivePlaybackMedia(row?.currentProgram)
+        }
+    }
 
     var controlsVisible by remember(channel.id) { mutableStateOf(true) }
     var activeSheet by remember(channel.id) { mutableStateOf<PlayerSheet?>(null) }
@@ -149,16 +161,18 @@ fun PremiumPlayerScreen(
     var lastChannelSwitchAt by remember { mutableLongStateOf(0L) }
     var upNextCancelled by remember(channel.id) { mutableStateOf(false) }
 
-    val player = remember(channel.id) {
-        ExoPlayer.Builder(context)
-            .setSeekBackIncrementMs(SEEK_STEP_MS)
-            .setSeekForwardIncrementMs(SEEK_STEP_MS)
-            .build()
-            .apply {
-                setMediaItem(MediaItem.fromUri(channel.streamUrl))
-                prepare()
-                playWhenReady = true
+    val player = remember(playbackMedia.mediaId, coordinatorState.localPlaybackAuthorized) {
+        coordinator.acquireLocalPlayer(playbackMedia)
+    }
+
+    if (player == null || coordinatorState.blocksLocalPlayback) {
+        Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                CircularProgressIndicator(color = CinematicColors.Gold, strokeWidth = 2.dp)
+                Text("Afspeelbestemming wisselen", color = Color.White.copy(alpha = 0.78f), style = CinematicTypography.Metadata)
             }
+        }
+        return
     }
 
     fun revealControls() {
@@ -210,6 +224,8 @@ fun PremiumPlayerScreen(
         externalIntent.resolveActivity(context.packageManager) != null
     }
     fun openExternal() {
+        coordinator.stopLocalForExternalPlayback(player)
+        onBack()
         runCatching { context.startActivity(externalIntent) }
     }
 
@@ -276,13 +292,14 @@ fun PremiumPlayerScreen(
         player.addListener(listener)
         onDispose {
             if (isMedia || state.settings.autoResumeLastChannel) {
-                val savedDuration = player.duration.takeIf { it != C.TIME_UNSET } ?: 0L
-                if (movie != null) viewModel.saveMovieProgress(movie.id, player.currentPosition.coerceAtLeast(0L), savedDuration)
-                else if (episode != null) viewModel.saveEpisodeProgress(episode.id, player.currentPosition.coerceAtLeast(0L), savedDuration)
-                else viewModel.savePlaybackPosition(channel, player.currentPosition.coerceAtLeast(0L), savedDuration, player.isCurrentMediaItemLive)
+                val savedPosition = position.coerceAtLeast(0L)
+                val savedDuration = duration.coerceAtLeast(0L)
+                if (movie != null) viewModel.saveMovieProgress(movie.id, savedPosition, savedDuration)
+                else if (episode != null) viewModel.saveEpisodeProgress(episode.id, savedPosition, savedDuration)
+                else viewModel.savePlaybackPosition(channel, savedPosition, savedDuration, playbackMedia.isLive)
             }
             player.removeListener(listener)
-            player.release()
+            coordinator.releaseLocalPlayer(player)
         }
     }
 
@@ -417,7 +434,7 @@ fun PremiumPlayerScreen(
         playerFailure = null
         playbackState = Player.STATE_BUFFERING
         revealControls()
-        player.setMediaItem(MediaItem.fromUri(channel.streamUrl))
+        player.setMediaItem(playbackMedia.toMediaItem())
         player.prepare()
         player.playWhenReady = true
     }

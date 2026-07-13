@@ -34,6 +34,7 @@ import com.example.streamguidemobile.data.parsedEpisodesToEntities
 import com.example.streamguidemobile.data.withDetails
 import com.example.streamguidemobile.domain.isGroupVisible
 import com.example.streamguidemobile.ui.player.normalizedResumePosition
+import com.example.streamguidemobile.playback.PlaybackCoordinator
 import com.example.streamguidemobile.ui.movies.CATEGORY_ALL
 import com.example.streamguidemobile.ui.movies.MovieFilters
 import com.example.streamguidemobile.ui.movies.MovieLibraryState
@@ -69,6 +70,8 @@ import java.time.ZoneId
 
 @OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
 class StreamGuideViewModel(application: Application) : AndroidViewModel(application) {
+    val playbackCoordinator = PlaybackCoordinator(application)
+    val playbackState = playbackCoordinator.state
     private val database = StreamGuideDatabase.get(application)
     private val playlistDao = database.playlistDao()
     private val channelDao = database.channelDao()
@@ -127,6 +130,11 @@ class StreamGuideViewModel(application: Application) : AndroidViewModel(applicat
             }
         }
         checkForAppUpdate(manual = false)
+    }
+
+    override fun onCleared() {
+        playbackCoordinator.release()
+        super.onCleared()
     }
 
     private val filters = combine(query, selectedGroup, showFavorites, showRecent) { queryValue, group, favorites, recent ->

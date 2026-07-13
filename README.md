@@ -6,6 +6,8 @@ StreamGuide Mobile is een originele Android IPTV-speler voor telefoons. De app l
 
 - Kotlin, Jetpack Compose en Material 3
 - Media3 / ExoPlayer voor afspelen
+- Google Cast / Chromecast via de officiële Cast-routeknop en de Default Media Receiver
+- Veilige overdracht tussen telefoon en Chromecast met maximaal één actieve IPTV-stream
 - Room database voor playlists, zenders en EPG-programma's
 - DataStore voor simpele instellingen
 - WorkManager voorbereiding voor periodieke playlist- en EPG-sync
@@ -27,7 +29,7 @@ StreamGuide Mobile is een originele Android IPTV-speler voor telefoons. De app l
 
 De app controleert `ScorpionZK89/streamguide-mobile` bij het starten en via **Instellingen > App-updates**. Alleen een nieuwere, gepubliceerde GitHub Release met een ondertekende `.apk` wordt aangeboden.
 
-De workflow `.github/workflows/release-apk.yml` test en publiceert automatisch een APK bij een tag zoals `v0.2.1`. Voor de eerste release moeten eenmalig deze GitHub Actions-secrets worden ingesteld:
+De workflow `.github/workflows/release-apk.yml` test en publiceert na iedere push naar `main` automatisch een ondertekende APK als nieuwe GitHub Release. De workflow bepaalt zelf het versienummer en de tag; handmatig een extra tag aanmaken is niet nodig. Voor publicatie moeten eenmalig deze GitHub Actions-secrets zijn ingesteld:
 
 - `STREAMGUIDE_KEYSTORE_BASE64`
 - `STREAMGUIDE_KEYSTORE_PASSWORD`
@@ -44,6 +46,7 @@ Open het project `streamguide-mobile` in Android Studio en klik op Run.
 2. Vul je eigen legale bron in.
 3. Voeg optioneel een XMLTV EPG URL toe. Bij Xtream mag je dit meestal leeg laten; de app probeert dan de ingebouwde gids.
 4. Controleer de tabs Zenders, Gids en Instellingen.
+5. Test Chromecast op hetzelfde wifi-netwerk via de Cast-knop in de speler of op een detailpagina. Controleer zowel overdracht naar de tv als **Verder kijken op telefoon**.
 
 ## Verdere uitbreiding
 

@@ -83,6 +83,7 @@ import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
 import com.example.streamguidemobile.data.MovieEntity
 import com.example.streamguidemobile.data.qualityBadge
+import com.example.streamguidemobile.ui.cast.CastRouteButton
 import com.example.streamguidemobile.ui.live.CinematicEmptyState
 import com.example.streamguidemobile.ui.live.CinematicIconAction
 import com.example.streamguidemobile.ui.live.CinematicSearchField
@@ -108,6 +109,7 @@ fun MoviesScreen(
     onToggleFavorite: (MovieEntity) -> Unit,
     onLoadDetails: (Long) -> Unit,
     onPlay: (MovieEntity, Boolean) -> Unit,
+    onPrepareCast: (MovieEntity) -> Unit,
     onSetWatched: (MovieEntity, Boolean) -> Unit,
     onGroupVisible: (String, Boolean) -> Unit,
     onShowAllGroups: () -> Unit,
@@ -123,7 +125,10 @@ fun MoviesScreen(
     val gridState = rememberLazyGridState()
     val selectedMovie = selectedMovieId?.let { id -> library.allMovies.firstOrNull { it.id == id } }
     if (selectedMovie != null) {
-        LaunchedEffect(selectedMovie.id) { onLoadDetails(selectedMovie.id) }
+        LaunchedEffect(selectedMovie.id) {
+            onLoadDetails(selectedMovie.id)
+            onPrepareCast(selectedMovie)
+        }
         BackHandler { onMovieSelected(null) }
         MovieDetailScreen(
             movie = selectedMovie,
@@ -431,6 +436,7 @@ private fun MovieDetailScreen(
                         if (movie.playbackPositionMs > 0L && movie.playbackDurationMs > 0L) MovieDetailProgress(movie)
                         Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                             MovieAction(movie.primaryActionLabel(), if (movie.isWatched) Icons.Default.RestartAlt else Icons.Default.PlayArrow, primary = true) { onPlay(movie.isWatched) }
+                            CastRouteButton(Modifier.size(34.dp))
                             MovieIconButton(if (movie.isFavorite) Icons.Default.Favorite else Icons.Outlined.FavoriteBorder, "Mijn lijst", movie.isFavorite, onToggleFavorite)
                         }
                     }
@@ -775,7 +781,7 @@ private fun MoviePreview(selectedMovieId: Long? = null) {
             library = buildMovieLibrary(movies, "", CATEGORY_ALL, MovieFilters(), MovieSort.RecentlyAdded),
             selectedMovieId = selectedMovieId,
             onMovieSelected = {}, onQueryChange = {}, onCategorySelected = {}, onFiltersChanged = {}, onClearFilters = {},
-            onSortChanged = {}, onToggleFavorite = {}, onLoadDetails = {}, onPlay = { _, _ -> }, onSetWatched = { _, _ -> },
+            onSortChanged = {}, onToggleFavorite = {}, onLoadDetails = {}, onPlay = { _, _ -> }, onPrepareCast = {}, onSetWatched = { _, _ -> },
             onGroupVisible = { _, _ -> }, onShowAllGroups = {}, onHideAllGroups = {}, onRetry = {}
         )
     }

@@ -65,6 +65,7 @@ import com.example.streamguidemobile.data.ChannelEntity
 import com.example.streamguidemobile.data.ProgramEntity
 import com.example.streamguidemobile.data.StreamResolution
 import com.example.streamguidemobile.data.streamResolutionBadge
+import com.example.streamguidemobile.ui.cast.CastRouteButton
 import com.example.streamguidemobile.ui.theme.CinematicColors
 import com.example.streamguidemobile.ui.theme.CinematicTypography
 import com.example.streamguidemobile.ui.theme.StreamGuideMotion
@@ -404,6 +405,7 @@ fun ProgramDetailPanel(
             }
             Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                 CinematicTextAction("Nu kijken", Icons.Default.PlayArrow, primary = true, onClick = onWatch)
+                CastRouteButton(Modifier.size(34.dp))
                 CinematicIconAction(
                     icon = if (selection.channel.isFavorite) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
                     description = if (selection.channel.isFavorite) "Uit favorieten verwijderen" else "Aan favorieten toevoegen",
