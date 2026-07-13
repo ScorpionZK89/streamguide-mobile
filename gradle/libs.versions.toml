@@ -12,6 +12,7 @@ kotlinxCoroutines = "1.9.0"
 lifecycle = "2.8.7"
 media3 = "1.5.1"
 mediaRouter = "1.8.1"
+googleCastFramework = "22.1.0"
 room = "2.6.1"
 work = "2.10.0"
 
@@ -31,6 +32,7 @@ androidx-media3-exoplayer = { module = "androidx.media3:media3-exoplayer", versi
 androidx-media3-cast = { module = "androidx.media3:media3-cast", version.ref = "media3" }
 androidx-media3-ui = { module = "androidx.media3:media3-ui", version.ref = "media3" }
 androidx-mediarouter = { module = "androidx.mediarouter:mediarouter", version.ref = "mediaRouter" }
+google-cast-framework = { module = "com.google.android.gms:play-services-cast-framework", version.ref = "googleCastFramework" }
 androidx-room-compiler = { module = "androidx.room:room-compiler", version.ref = "room" }
 androidx-room-ktx = { module = "androidx.room:room-ktx", version.ref = "room" }
 androidx-room-runtime = { module = "androidx.room:room-runtime", version.ref = "room" }

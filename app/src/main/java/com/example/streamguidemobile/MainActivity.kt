@@ -115,6 +115,7 @@ import com.example.streamguidemobile.playback.PlaybackCoordinatorStatus
 import com.example.streamguidemobile.playback.toLivePlaybackMedia
 import com.example.streamguidemobile.playback.toPlaybackMedia
 import com.example.streamguidemobile.ui.cast.CastPlaybackScreen
+import com.example.streamguidemobile.ui.cast.CastRouteProvider
 import com.example.streamguidemobile.ui.theme.StreamGuideTheme
 import com.example.streamguidemobile.ui.home.CinematicHomeScreen
 import com.example.streamguidemobile.ui.guide.ProgramGuideScreen
@@ -151,7 +152,9 @@ class MainActivity : FragmentActivity() {
         SyncScheduler.schedule(this)
         setContent {
             StreamGuideTheme {
-                StreamGuideApp(viewModel)
+                CastRouteProvider {
+                    StreamGuideApp(viewModel)
+                }
             }
         }
     }
