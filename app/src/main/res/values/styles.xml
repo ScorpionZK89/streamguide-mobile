@@ -7,6 +7,10 @@
     </style>
 
     <style name="ThemeOverlay.StreamGuideMobile.CastButton" parent="Theme.MediaRouter">
+        <item name="colorPrimary">@color/launcher_background</item>
+        <item name="colorPrimaryDark">@color/launcher_background</item>
+        <item name="colorAccent">#FF72D6C9</item>
+        <item name="android:colorBackground">@color/launcher_background</item>
         <item name="colorControlNormal">#FFFFFFFF</item>
         <item name="mediaRouteButtonTint">#FFFFFFFF</item>
     </style>
