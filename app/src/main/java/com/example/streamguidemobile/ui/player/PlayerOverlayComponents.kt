@@ -651,42 +651,49 @@ internal fun MediaUpNextCard(
 ) {
     Row(
         modifier = modifier
-            .widthIn(max = 680.dp)
-            .height(92.dp)
-            .clip(RoundedCornerShape(11.dp))
-            .background(CinematicColors.Panel.copy(alpha = 0.92f))
-            .border(1.dp, CinematicColors.Gold.copy(alpha = 0.38f), RoundedCornerShape(11.dp)),
+            .widthIn(max = 720.dp)
+            .height(98.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(
+                Brush.horizontalGradient(
+                    listOf(CinematicColors.PanelRaised.copy(alpha = .97f), CinematicColors.Panel.copy(alpha = .94f))
+                )
+            )
+            .border(1.dp, CinematicColors.Gold.copy(alpha = 0.48f), RoundedCornerShape(12.dp)),
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (!artworkUrl.isNullOrBlank()) {
             AsyncImage(
                 model = artworkUrl,
                 contentDescription = null,
-                modifier = Modifier.fillMaxHeight().aspectRatio(16f / 10f),
+                modifier = Modifier.fillMaxHeight().aspectRatio(16f / 9f),
                 contentScale = ContentScale.Crop
             )
         } else if (artwork != null) {
             Image(
                 painter = artwork,
                 contentDescription = null,
-                modifier = Modifier.fillMaxHeight().aspectRatio(16f / 10f),
+                modifier = Modifier.fillMaxHeight().aspectRatio(16f / 9f),
                 contentScale = ContentScale.Crop
             )
         }
         Column(
-            modifier = Modifier.weight(1f).padding(horizontal = 13.dp, vertical = 9.dp),
+            modifier = Modifier.weight(1f).padding(horizontal = 13.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(3.dp)
         ) {
-            Text("VOLGENDE", color = CinematicColors.GoldBright, style = CinematicTypography.Badge)
-            Text(title, color = Color.White, style = CinematicTypography.SectionTitle, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Box(Modifier.width(22.dp).height(2.dp).background(CinematicColors.Gold, RoundedCornerShape(2.dp)))
+                Text("VOLGENDE AFLEVERING", color = CinematicColors.GoldBright, style = CinematicTypography.Badge)
+            }
+            Text(title, color = Color.White, style = CinematicTypography.SectionTitle, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Text(metadata, color = Color.White.copy(alpha = 0.62f), style = CinematicTypography.Metadata, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         Column(
-            modifier = Modifier.padding(end = 11.dp),
+            modifier = Modifier.fillMaxHeight().padding(end = 11.dp, top = 8.dp, bottom = 8.dp),
             horizontalAlignment = Alignment.End,
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+            verticalArrangement = Arrangement.SpaceBetween
         ) {
-            Text("Start over ${countdownSeconds.coerceAtLeast(0)} s", color = Color.White.copy(alpha = 0.62f), style = CinematicTypography.Badge)
+            Text("Start over ${countdownSeconds.coerceAtLeast(0)} s", color = CinematicColors.GoldBright, style = CinematicTypography.Badge)
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 PlayerTextButton("Annuleren", onClick = onCancel)
                 PlayerTextButton("Nu afspelen", primary = true, onClick = onPlay)
