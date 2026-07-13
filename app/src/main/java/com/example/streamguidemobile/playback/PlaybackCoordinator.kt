@@ -5,6 +5,7 @@ package com.example.streamguidemobile.playback
 import android.content.Context
 import android.util.Log
 import androidx.annotation.MainThread
+import androidx.core.content.ContextCompat
 import androidx.media3.cast.CastPlayer
 import androidx.media3.cast.SessionAvailabilityListener
 import androidx.media3.common.C
@@ -43,27 +44,11 @@ class PlaybackCoordinator(context: Context) {
     private val _state = MutableStateFlow(PlaybackCoordinatorState())
     val state: StateFlow<PlaybackCoordinatorState> = _state.asStateFlow()
 
-    // Some devices can expose the Cast framework while its runtime is unavailable or outdated.
-    // Keep that optional integration from taking down local playback and the content libraries.
-    private val castRuntime: CastRuntime? = runCatching {
-        @Suppress("DEPRECATION")
-        val context = CastContext.getSharedInstance(appContext)
-        CastRuntime(
-            context = context,
-            player = CastPlayer(
-                appContext,
-                context,
-                androidx.media3.cast.DefaultMediaItemConverter(),
-                10_000L,
-                10_000L,
-                3_000L
-            )
-        )
-    }.onFailure { error ->
-        Log.w(TAG, "Google Cast runtime is unavailable; local playback remains enabled.", error)
-    }.getOrNull()
-    private val castContext: CastContext? = castRuntime?.context
-    private val castPlayer: CastPlayer? = castRuntime?.player
+    // Cast is an optional Play-services module. Its asynchronous API reports devices where the
+    // module is missing or outdated instead of letting synchronous initialization close the app.
+    private var castContext: CastContext? = null
+    private var castPlayer: CastPlayer? = null
+    private var castInitializationStarted = false
     private var localPlayer: ExoPlayer? = null
     private var localListener: Player.Listener? = null
     private var localMedia: PlaybackMedia? = null
@@ -150,10 +135,7 @@ class PlaybackCoordinator(context: Context) {
     }
 
     init {
-        castPlayer?.addListener(castPlayerListener)
-        castPlayer?.setSessionAvailabilityListener(sessionAvailabilityListener)
-        castContext?.sessionManager?.addSessionManagerListener(sessionManagerListener, CastSession::class.java)
-        if (castPlayer?.isCastSessionAvailable == true) handleCastSessionAvailable()
+        initializeCastRuntime()
 
         scope.launch {
             while (isActive) {
@@ -164,6 +146,48 @@ class PlaybackCoordinator(context: Context) {
     }
 
     val isCastSessionAvailable: Boolean get() = castPlayer?.isCastSessionAvailable == true
+
+    private fun initializeCastRuntime() {
+        if (released || castInitializationStarted) return
+        castInitializationStarted = true
+        runCatching {
+            CastContext.getSharedInstance(
+                appContext,
+                ContextCompat.getMainExecutor(appContext)
+            ).addOnSuccessListener(::attachCastRuntime)
+                .addOnFailureListener { error ->
+                    Log.w(TAG, "Google Cast runtime is unavailable; local playback remains enabled.", error)
+                }
+        }.onFailure { error ->
+            Log.w(TAG, "Google Cast runtime could not be initialized; local playback remains enabled.", error)
+        }
+    }
+
+    private fun attachCastRuntime(context: CastContext) {
+        val player = runCatching {
+            CastPlayer(
+                appContext,
+                context,
+                androidx.media3.cast.DefaultMediaItemConverter(),
+                10_000L,
+                10_000L,
+                3_000L
+            )
+        }.onFailure { error ->
+            Log.w(TAG, "Google Cast player is unavailable; local playback remains enabled.", error)
+        }.getOrNull() ?: return
+
+        if (released) {
+            player.release()
+            return
+        }
+        castContext = context
+        castPlayer = player
+        player.addListener(castPlayerListener)
+        player.setSessionAvailabilityListener(sessionAvailabilityListener)
+        context.sessionManager.addSessionManagerListener(sessionManagerListener, CastSession::class.java)
+        if (player.isCastSessionAvailable) handleCastSessionAvailable()
+    }
 
     /** Keeps the item that should load if the user connects from a detail screen. */
     fun prepareCastCandidate(media: PlaybackMedia) {
@@ -687,11 +711,6 @@ class PlaybackCoordinator(context: Context) {
     }
 
     private enum class SessionEndPurpose { NONE, CONTINUE_LOCAL, STOP, DISCONNECT }
-
-    private data class CastRuntime(
-        val context: CastContext,
-        val player: CastPlayer
-    )
 
     private companion object {
         const val TAG = "PlaybackCoordinator"

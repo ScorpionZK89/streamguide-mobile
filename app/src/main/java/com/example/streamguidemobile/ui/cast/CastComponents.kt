@@ -41,6 +41,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -76,61 +78,93 @@ private val LocalCastRouteLauncher = staticCompositionLocalOf<() -> Unit> { {} }
 @Composable
 fun CastRouteProvider(content: @Composable () -> Unit) {
     val context = LocalContext.current
-    var routeButton by remember { mutableStateOf<MediaRouteButton?>(null) }
+    val hostState = remember { CastRouteHostState() }
+    var hostInitialized by remember { mutableStateOf(false) }
+    var pickerPending by remember { mutableStateOf(false) }
     var setupReady by remember { mutableStateOf(false) }
     var setupError by remember { mutableStateOf<Throwable?>(null) }
 
     val launchCastPicker: () -> Unit = {
-        val button = routeButton
+        val button = hostState.routeButton
         when {
             setupError != null -> showCastFailure(context, setupError)
-            !setupReady || button == null || !button.isAttachedToWindow -> {
-                Toast.makeText(context, "Google Cast wordt gestart. Probeer het zo nogmaals.", Toast.LENGTH_SHORT).show()
-            }
-            else -> runCatching { button.performClick() }
+            setupReady && button?.isAttachedToWindow == true -> runCatching { button.performClick() }
                 .onFailure { error -> showCastFailure(context, error) }
+            else -> {
+                hostInitialized = true
+                pickerPending = true
+            }
         }
     }
 
     Box(Modifier.fillMaxSize()) {
-        AndroidView(
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .size(1.dp)
-                .alpha(0.01f),
-            factory = { viewContext ->
+        if (hostInitialized) {
+            val button = remember(context) {
                 val themedContext = ContextThemeWrapper(
-                    viewContext,
+                    context,
                     R.style.ThemeOverlay_StreamGuideMobile_CastButton
                 )
-                MediaRouteButton(themedContext).also { button ->
-                    button.contentDescription = "Afspelen op Chromecast"
+                MediaRouteButton(themedContext).apply {
+                    contentDescription = "Afspelen op Chromecast"
                     @Suppress("DEPRECATION")
-                    button.setAlwaysVisible(true)
-                    routeButton = button
-                    runCatching {
-                        CastButtonFactory.setUpMediaRouteButton(
-                            viewContext.applicationContext,
-                            ContextCompat.getMainExecutor(viewContext),
-                            button
-                        ).addOnSuccessListener {
-                            setupReady = true
-                        }.addOnFailureListener { error ->
-                            setupError = error
-                            Log.w(CAST_UI_TAG, "Google Cast button setup failed.", error)
-                        }
-                    }.onFailure { error ->
+                    setAlwaysVisible(true)
+                }
+            }
+            DisposableEffect(button) {
+                hostState.routeButton = button
+                onDispose {
+                    if (hostState.routeButton === button) hostState.routeButton = null
+                }
+            }
+            LaunchedEffect(button) {
+                runCatching {
+                    CastButtonFactory.setUpMediaRouteButton(
+                        context.applicationContext,
+                        ContextCompat.getMainExecutor(context),
+                        button
+                    ).addOnSuccessListener {
+                        setupReady = true
+                    }.addOnFailureListener { error ->
                         setupError = error
+                        pickerPending = false
                         Log.w(CAST_UI_TAG, "Google Cast button setup failed.", error)
                     }
+                }.onFailure { error ->
+                    setupError = error
+                    pickerPending = false
+                    Log.w(CAST_UI_TAG, "Google Cast button setup failed.", error)
                 }
-            },
-            update = { routeButton = it }
-        )
+            }
+            LaunchedEffect(pickerPending, setupReady, button) {
+                if (pickerPending && setupReady) {
+                    button.post {
+                        if (pickerPending && button.isAttachedToWindow) {
+                            pickerPending = false
+                            runCatching { button.performClick() }
+                                .onFailure { error -> showCastFailure(context, error) }
+                        }
+                    }
+                }
+            }
+            LaunchedEffect(setupError) {
+                setupError?.let { error -> showCastFailure(context, error) }
+            }
+            AndroidView(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .size(1.dp)
+                    .alpha(0.01f),
+                factory = { button }
+            )
+        }
         CompositionLocalProvider(LocalCastRouteLauncher provides launchCastPicker) {
             content()
         }
     }
+}
+
+private class CastRouteHostState {
+    var routeButton: MediaRouteButton? = null
 }
 
 @Composable
