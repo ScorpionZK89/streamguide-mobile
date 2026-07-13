@@ -41,4 +41,22 @@ class M3uParserTest {
         assertEquals(M3uParser.DEFAULT_GROUP, channels[0].groupTitle)
         assertNull(channels[0].tvgId)
     }
+
+    @Test
+    fun classifiesOnlyExplicitVodItemsAsMovies() {
+        val input = """
+            #EXTM3U
+            #EXTINF:-1 type="movie" group-title="Cinema" year="2024" genre="Drama",Example Film
+            https://example.com/movie.mp4
+            #EXTINF:-1 group-title="Movie Channels",Linear Cinema
+            https://example.com/live.m3u8
+        """.trimIndent()
+
+        val items = parser.parse(input)
+
+        assertEquals(ParsedContentType.Movie, items[0].contentType)
+        assertEquals(2024, items[0].year)
+        assertEquals("Drama", items[0].genre)
+        assertEquals(ParsedContentType.Live, items[1].contentType)
+    }
 }

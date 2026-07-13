@@ -22,21 +22,25 @@ class M3uParser {
                 line.startsWith("#") -> Unit
                 pending != null -> {
                     val info = pending
-                    if (info != null) {
-                        val tvgName = info.attributes["tvg-name"].cleanOrNull()
-                        val displayName = info.displayName.cleanOrNull()
-                        yield(
-                            ParsedChannel(
-                                name = tvgName ?: displayName ?: "Kanaal ${count + 1}",
-                                tvgId = info.attributes["tvg-id"].cleanOrNull(),
-                                tvgName = tvgName,
-                                logoUrl = info.attributes["tvg-logo"].cleanOrNull(),
-                                groupTitle = info.attributes["group-title"].cleanOrNull() ?: DEFAULT_GROUP,
-                                streamUrl = line
-                            )
+                    val tvgName = info.attributes["tvg-name"].cleanOrNull()
+                    val displayName = info.displayName.cleanOrNull()
+                    val groupTitle = info.attributes["group-title"].cleanOrNull() ?: DEFAULT_GROUP
+                    yield(
+                        ParsedChannel(
+                            name = tvgName ?: displayName ?: "Kanaal ${count + 1}",
+                            tvgId = info.attributes["tvg-id"].cleanOrNull(),
+                            tvgName = tvgName,
+                            logoUrl = info.attributes["tvg-logo"].cleanOrNull(),
+                            groupTitle = groupTitle,
+                            streamUrl = line,
+                            contentType = detectContentType(info.attributes, groupTitle),
+                            description = info.attributes["description"].cleanOrNull()
+                                ?: info.attributes["tvg-description"].cleanOrNull(),
+                            year = info.attributes["year"]?.toIntOrNull(),
+                            genre = info.attributes["genre"].cleanOrNull()
                         )
-                        count += 1
-                    }
+                    )
+                    count += 1
                     pending = null
                 }
             }
@@ -66,13 +70,30 @@ class M3uParser {
 
     private fun String?.cleanOrNull(): String? = this?.trim()?.takeIf { it.isNotEmpty() }
 
+    private fun detectContentType(attributes: Map<String, String>, groupTitle: String): ParsedContentType {
+        val declaredType = sequenceOf("tvg-type", "content-type", "type")
+            .mapNotNull(attributes::get)
+            .joinToString(" ")
+            .lowercase()
+        if (declaredType.contains("movie") || declaredType.contains("vod") || declaredType.contains("film")) {
+            return ParsedContentType.Movie
+        }
+        val normalizedGroup = groupTitle.trim().lowercase()
+        val explicitMovieGroup = normalizedGroup in setOf("movie", "movies", "film", "films", "vod") ||
+            VOD_GROUP_PATTERN.containsMatchIn(normalizedGroup)
+        return if (explicitMovieGroup) ParsedContentType.Movie else ParsedContentType.Live
+    }
+
     private data class PendingExtInf(val attributes: Map<String, String>, val displayName: String?)
 
     companion object {
         const val DEFAULT_GROUP = "Overig"
         private val attributeRegex = Regex("""([A-Za-z0-9_-]+)\s*=\s*"([^"]*)"""")
+        private val VOD_GROUP_PATTERN = Regex("(^|[|:_ -])vod([|:_ -]|$)")
     }
 }
+
+enum class ParsedContentType { Live, Movie }
 
 data class ParsedChannel(
     val name: String,
@@ -80,5 +101,9 @@ data class ParsedChannel(
     val tvgName: String?,
     val logoUrl: String?,
     val groupTitle: String,
-    val streamUrl: String
+    val streamUrl: String,
+    val contentType: ParsedContentType = ParsedContentType.Live,
+    val description: String? = null,
+    val year: Int? = null,
+    val genre: String? = null
 )

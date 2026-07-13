@@ -1,0 +1,95 @@
+name: Publiceer StreamGuide APK
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Versienummer, bijvoorbeeld 0.2.0"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: streamguide-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Code ophalen
+        uses: actions/checkout@v4
+
+      - name: Java 17 instellen
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Gradle instellen
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Versie bepalen
+        shell: bash
+        run: |
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            VERSION="${{ inputs.version }}"
+            VERSION="${VERSION#v}"
+            TAG="v${VERSION}"
+          elif [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            TAG="${GITHUB_REF_NAME}"
+            VERSION="${TAG#v}"
+          else
+            VERSION="0.2.${GITHUB_RUN_NUMBER}"
+            TAG="v${VERSION}"
+          fi
+          echo "RELEASE_VERSION=${VERSION}" >> "$GITHUB_ENV"
+          echo "RELEASE_TAG=${TAG}" >> "$GITHUB_ENV"
+          echo "STREAMGUIDE_VERSION_NAME=${VERSION}" >> "$GITHUB_ENV"
+          echo "STREAMGUIDE_VERSION_CODE=$((100000 + GITHUB_RUN_NUMBER))" >> "$GITHUB_ENV"
+
+      - name: Ondertekeningssleutel voorbereiden
+        shell: bash
+        env:
+          KEYSTORE_BASE64: ${{ secrets.STREAMGUIDE_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.STREAMGUIDE_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.STREAMGUIDE_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.STREAMGUIDE_KEY_PASSWORD }}
+        run: |
+          if [[ -z "$KEYSTORE_BASE64" || -z "$KEYSTORE_PASSWORD" || -z "$KEY_ALIAS" || -z "$KEY_PASSWORD" ]]; then
+            echo "De vier STREAMGUIDE ondertekenings-secrets ontbreken."
+            exit 1
+          fi
+          echo "$KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/streamguide-release.jks"
+          echo "STREAMGUIDE_KEYSTORE_PATH=$RUNNER_TEMP/streamguide-release.jks" >> "$GITHUB_ENV"
+          echo "STREAMGUIDE_KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+          echo "STREAMGUIDE_KEY_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"
+          echo "STREAMGUIDE_KEY_PASSWORD=$KEY_PASSWORD" >> "$GITHUB_ENV"
+
+      - name: Testen en release-APK bouwen
+        shell: bash
+        run: |
+          chmod +x gradlew
+          ./gradlew testDebugUnitTest assembleRelease --stacktrace
+          cp app/build/outputs/apk/release/app-release.apk "StreamGuide-Mobile-${RELEASE_VERSION}.apk"
+
+      - name: GitHub Release publiceren
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "StreamGuide-Mobile-${RELEASE_VERSION}.apk" --clobber
+          else
+            gh release create "$RELEASE_TAG" "StreamGuide-Mobile-${RELEASE_VERSION}.apk" \
+              --title "StreamGuide Mobile ${RELEASE_VERSION}" \
+              --generate-notes \
+              --latest
+          fi
