@@ -57,6 +57,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.mediarouter.app.MediaRouteChooserDialogFragment
+import androidx.mediarouter.app.MediaRouteDialogFactory
 import androidx.mediarouter.media.MediaRouteSelector
 import coil.compose.AsyncImage
 import com.example.streamguidemobile.playback.CastTrack
@@ -88,9 +89,6 @@ private fun openCastRouteChooser(context: Context) {
         val activity = context.findFragmentActivity()
             ?: error("De Cast-kiezer vereist een FragmentActivity.")
         val fragmentManager = activity.supportFragmentManager
-        if (fragmentManager.isStateSaved || fragmentManager.findFragmentByTag(CAST_ROUTE_CHOOSER_TAG) != null) {
-            return
-        }
         val selector = MediaRouteSelector.Builder()
             .addControlCategory(
                 CastMediaControlIntent.categoryForCast(
@@ -98,9 +96,14 @@ private fun openCastRouteChooser(context: Context) {
                 )
             )
             .build()
-        MediaRouteChooserDialogFragment().apply {
+        val dialogFactory = MediaRouteDialogFactory.getDefault()
+        if (fragmentManager.findFragmentByTag(CAST_ROUTE_CHOOSER_TAG) != null) return
+        val chooser: MediaRouteChooserDialogFragment = dialogFactory.onCreateChooserDialogFragment().apply {
             routeSelector = selector
-        }.show(fragmentManager, CAST_ROUTE_CHOOSER_TAG)
+        }
+        fragmentManager.beginTransaction()
+            .add(chooser, CAST_ROUTE_CHOOSER_TAG)
+            .commitAllowingStateLoss()
     }.onFailure { error ->
         Log.w(CAST_UI_TAG, "Google Cast route chooser failed.", error)
         Toast.makeText(
@@ -123,7 +126,7 @@ private fun Context.findFragmentActivity(): FragmentActivity? {
 }
 
 private const val CAST_UI_TAG = "CastRouteButton"
-private const val CAST_ROUTE_CHOOSER_TAG = "streamguide_cast_route_chooser"
+private const val CAST_ROUTE_CHOOSER_TAG = "android.support.v7.mediarouter:MediaRouteChooserDialogFragment"
 
 @Composable
 fun CastPlaybackScreen(
