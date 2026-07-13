@@ -2,7 +2,6 @@ package com.example.streamguidemobile.ui.cast
 
 import android.util.Log
 import android.view.ContextThemeWrapper
-import android.widget.ImageButton
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -54,6 +53,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.core.content.ContextCompat
 import androidx.mediarouter.app.MediaRouteButton
 import com.example.streamguidemobile.R
 import coil.compose.AsyncImage
@@ -72,28 +72,34 @@ fun CastRouteButton(modifier: Modifier = Modifier) {
         modifier = modifier.size(46.dp),
         factory = { context ->
             val themedContext = ContextThemeWrapper(context, R.style.ThemeOverlay_StreamGuideMobile_CastButton)
-            runCatching {
-                MediaRouteButton(themedContext).apply {
-                    contentDescription = "Afspelen op Chromecast"
-                    CastButtonFactory.setUpMediaRouteButton(context, this)
-                }
-            }.getOrElse { error ->
-                Log.w(CAST_UI_TAG, "Google Cast button setup failed.", error)
-                ImageButton(themedContext).apply {
-                    setImageResource(androidx.mediarouter.R.drawable.mr_button_dark_static)
-                    background = null
-                    contentDescription = "Google Cast niet beschikbaar"
-                    setOnClickListener {
-                        Toast.makeText(
-                            context,
-                            "Google Cast is niet beschikbaar. Controleer wifi en Google Play-services.",
-                            Toast.LENGTH_LONG
-                        ).show()
-                    }
+            MediaRouteButton(themedContext).apply {
+                contentDescription = "Afspelen op Chromecast"
+                runCatching {
+                    CastButtonFactory.setUpMediaRouteButton(
+                        context,
+                        ContextCompat.getMainExecutor(context),
+                        this
+                    ).addOnFailureListener { error -> configureCastFailure(context, error) }
+                }.onFailure { error ->
+                    configureCastFailure(context, error)
                 }
             }
         }
     )
+}
+
+@Suppress("DEPRECATION")
+private fun MediaRouteButton.configureCastFailure(context: android.content.Context, error: Throwable) {
+    Log.w(CAST_UI_TAG, "Google Cast button setup failed.", error)
+    setAlwaysVisible(true)
+    contentDescription = "Google Cast niet beschikbaar"
+    setOnClickListener {
+        Toast.makeText(
+            context,
+            "Google Cast kon niet worden gestart. Werk Google Play-services bij en probeer opnieuw.",
+            Toast.LENGTH_LONG
+        ).show()
+    }
 }
 
 private const val CAST_UI_TAG = "CastRouteButton"
