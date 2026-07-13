@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Audiotrack
+import androidx.compose.material.icons.filled.Cast
 import androidx.compose.material.icons.filled.CastConnected
 import androidx.compose.material.icons.filled.ClosedCaption
 import androidx.compose.material.icons.filled.Pause
@@ -71,7 +72,24 @@ import com.google.android.gms.cast.framework.CastButtonFactory
 @Composable
 fun CastRouteButton(modifier: Modifier = Modifier) {
     val context = LocalContext.current
-    var setupError by remember { mutableStateOf<Throwable?>(null) }
+    var nativeButtonRequested by remember { mutableStateOf(false) }
+
+    if (!nativeButtonRequested) {
+        IconButton(
+            modifier = modifier.size(46.dp),
+            onClick = {
+                nativeButtonRequested = true
+            }
+        ) {
+            Icon(
+                imageVector = Icons.Default.Cast,
+                contentDescription = "Google Cast voorbereiden",
+                tint = Color.White
+            )
+        }
+        return
+    }
+
     val button = remember(context) {
         val themedContext = ContextThemeWrapper(
             context,
@@ -93,17 +111,21 @@ fun CastRouteButton(modifier: Modifier = Modifier) {
                 button
             ).addOnSuccessListener {
                 button.isEnabled = true
+                Toast.makeText(
+                    context,
+                    "Google Cast is klaar. Tik nogmaals om een apparaat te kiezen.",
+                    Toast.LENGTH_SHORT
+                ).show()
             }.addOnFailureListener { error ->
-                setupError = error
+                nativeButtonRequested = false
                 Log.w(CAST_UI_TAG, "Google Cast button setup failed.", error)
+                showCastFailure(context, error)
             }
         }.onFailure { error ->
-            setupError = error
+            nativeButtonRequested = false
             Log.w(CAST_UI_TAG, "Google Cast button setup failed.", error)
+            showCastFailure(context, error)
         }
-    }
-    LaunchedEffect(setupError) {
-        setupError?.let { error -> showCastFailure(context, error) }
     }
 
     AndroidView(
