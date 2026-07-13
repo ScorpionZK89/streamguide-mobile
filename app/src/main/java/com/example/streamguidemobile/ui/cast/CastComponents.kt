@@ -1,8 +1,10 @@
 package com.example.streamguidemobile.ui.cast
 
+import android.content.Context
+import android.content.ContextWrapper
 import android.util.Log
-import android.view.ContextThemeWrapper
 import android.widget.Toast
+import androidx.fragment.app.FragmentActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,6 +21,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Audiotrack
+import androidx.compose.material.icons.filled.Cast
 import androidx.compose.material.icons.filled.CastConnected
 import androidx.compose.material.icons.filled.ClosedCaption
 import androidx.compose.material.icons.filled.Pause
@@ -49,12 +52,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
-import androidx.mediarouter.app.MediaRouteButton
-import com.example.streamguidemobile.R
+import androidx.mediarouter.app.MediaRouteChooserDialogFragment
+import androidx.mediarouter.media.MediaRouteSelector
 import coil.compose.AsyncImage
 import com.example.streamguidemobile.playback.CastTrack
 import com.example.streamguidemobile.playback.PlaybackContentType
@@ -63,33 +66,43 @@ import com.example.streamguidemobile.playback.PlaybackCoordinatorStatus
 import com.example.streamguidemobile.ui.player.formatPlaybackTime
 import com.example.streamguidemobile.ui.theme.CinematicColors
 import com.example.streamguidemobile.ui.theme.CinematicTypography
-import com.google.android.gms.cast.framework.CastButtonFactory
+import com.google.android.gms.cast.CastMediaControlIntent
 
 @Composable
 fun CastRouteButton(modifier: Modifier = Modifier) {
-    AndroidView(
+    val context = LocalContext.current
+    IconButton(
         modifier = modifier.size(46.dp),
-        factory = { context ->
-            val themedContext = ContextThemeWrapper(context, R.style.ThemeOverlay_StreamGuideMobile_CastButton)
-            MediaRouteButton(themedContext).apply {
-                contentDescription = "Afspelen op Chromecast"
-                runCatching {
-                    @Suppress("DEPRECATION")
-                    CastButtonFactory.setUpMediaRouteButton(context, this)
-                }.onFailure { error ->
-                    configureCastFailure(context, error)
-                }
-            }
-        }
-    )
+        onClick = { openCastRouteChooser(context) }
+    ) {
+        Icon(
+            imageVector = Icons.Default.Cast,
+            contentDescription = "Afspelen op Chromecast",
+            tint = Color.White
+        )
+    }
 }
 
-@Suppress("DEPRECATION")
-private fun MediaRouteButton.configureCastFailure(context: android.content.Context, error: Throwable) {
-    Log.w(CAST_UI_TAG, "Google Cast button setup failed.", error)
-    setAlwaysVisible(true)
-    contentDescription = "Google Cast niet beschikbaar"
-    setOnClickListener {
+private fun openCastRouteChooser(context: Context) {
+    runCatching {
+        val activity = context.findFragmentActivity()
+            ?: error("De Cast-kiezer vereist een FragmentActivity.")
+        val fragmentManager = activity.supportFragmentManager
+        if (fragmentManager.isStateSaved || fragmentManager.findFragmentByTag(CAST_ROUTE_CHOOSER_TAG) != null) {
+            return
+        }
+        val selector = MediaRouteSelector.Builder()
+            .addControlCategory(
+                CastMediaControlIntent.categoryForCast(
+                    CastMediaControlIntent.DEFAULT_MEDIA_RECEIVER_APPLICATION_ID
+                )
+            )
+            .build()
+        MediaRouteChooserDialogFragment().apply {
+            routeSelector = selector
+        }.show(fragmentManager, CAST_ROUTE_CHOOSER_TAG)
+    }.onFailure { error ->
+        Log.w(CAST_UI_TAG, "Google Cast route chooser failed.", error)
         Toast.makeText(
             context,
             "Google Cast kon niet worden gestart. Werk Google Play-services bij en probeer opnieuw.",
@@ -98,7 +111,19 @@ private fun MediaRouteButton.configureCastFailure(context: android.content.Conte
     }
 }
 
+private fun Context.findFragmentActivity(): FragmentActivity? {
+    var current: Context = this
+    while (current is ContextWrapper) {
+        if (current is FragmentActivity) return current
+        val base = current.baseContext
+        if (base === current) return null
+        current = base
+    }
+    return current as? FragmentActivity
+}
+
 private const val CAST_UI_TAG = "CastRouteButton"
+private const val CAST_ROUTE_CHOOSER_TAG = "streamguide_cast_route_chooser"
 
 @Composable
 fun CastPlaybackScreen(
