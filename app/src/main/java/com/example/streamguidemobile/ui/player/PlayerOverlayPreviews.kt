@@ -95,6 +95,8 @@ private fun PremiumPlayerPreview(mode: PlayerPreviewMode) {
                 playIcon = Icons.Default.PlayArrow,
                 pauseIcon = Icons.Default.Pause,
                 seekForwardIcon = Icons.Default.Forward10,
+                onPreviousChannel = if (isMedia) null else ({}),
+                onNextChannel = if (isMedia) null else ({}),
                 modifier = Modifier.align(Alignment.Center)
             )
 

@@ -197,9 +197,8 @@ fun PremiumPlayerScreen(
         if (timestamp - lastChannelSwitchAt < CHANNEL_SWITCH_DEBOUNCE_MS) return
         val visibleChannels = state.homeRows.map { it.channel }.ifEmpty { state.channels }
         val currentIndex = visibleChannels.indexOfFirst { it.id == currentChannel.id }
-        if (currentIndex < 0 || visibleChannels.isEmpty()) return
+        val nextIndex = nextChannelIndex(currentIndex, visibleChannels.size, direction) ?: return
         lastChannelSwitchAt = timestamp
-        val nextIndex = (currentIndex + direction + visibleChannels.size) % visibleChannels.size
         onOpenChannel(visibleChannels[nextIndex])
     }
 
@@ -535,6 +534,8 @@ fun PremiumPlayerScreen(
                     playIcon = Icons.Default.PlayArrow,
                     pauseIcon = Icons.Default.Pause,
                     seekForwardIcon = Icons.Default.Forward10,
+                    onPreviousChannel = if (isMedia) null else ({ switchChannel(-1) }),
+                    onNextChannel = if (isMedia) null else ({ switchChannel(1) }),
                     modifier = Modifier.align(Alignment.Center)
                 )
 
@@ -823,6 +824,11 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
     is Activity -> this
     is ContextWrapper -> baseContext.findActivity()
     else -> null
+}
+
+internal fun nextChannelIndex(currentIndex: Int, channelCount: Int, direction: Int): Int? {
+    if (currentIndex !in 0 until channelCount) return null
+    return Math.floorMod(currentIndex + direction, channelCount)
 }
 
 private const val SEEK_STEP_MS = 10_000L

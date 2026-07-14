@@ -2,10 +2,29 @@ package com.example.streamguidemobile.ui.player
 
 import androidx.media3.common.Format
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PlayerModelsTest {
+    @Test
+    fun `channel controls move backward and forward`() {
+        assertEquals(1, nextChannelIndex(currentIndex = 0, channelCount = 3, direction = 1))
+        assertEquals(1, nextChannelIndex(currentIndex = 2, channelCount = 3, direction = -1))
+    }
+
+    @Test
+    fun `channel controls wrap at both ends of the list`() {
+        assertEquals(2, nextChannelIndex(currentIndex = 0, channelCount = 3, direction = -1))
+        assertEquals(0, nextChannelIndex(currentIndex = 2, channelCount = 3, direction = 1))
+    }
+
+    @Test
+    fun `channel controls reject an empty or unknown selection`() {
+        assertNull(nextChannelIndex(currentIndex = -1, channelCount = 3, direction = 1))
+        assertNull(nextChannelIndex(currentIndex = 0, channelCount = 0, direction = 1))
+    }
+
     @Test
     fun `formats short and long playback positions`() {
         assertEquals("00:00", formatPlaybackTime(-1L))

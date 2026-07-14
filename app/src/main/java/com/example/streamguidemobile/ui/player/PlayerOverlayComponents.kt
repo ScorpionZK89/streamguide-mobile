@@ -41,6 +41,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.outlined.FavoriteBorder
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -239,13 +241,20 @@ internal fun PremiumCenterControls(
     playIcon: ImageVector,
     pauseIcon: ImageVector,
     seekForwardIcon: ImageVector,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onPreviousChannel: (() -> Unit)? = null,
+    onNextChannel: (() -> Unit)? = null
 ) {
     Row(
         modifier = modifier,
-        horizontalArrangement = Arrangement.spacedBy(18.dp),
+        horizontalArrangement = Arrangement.spacedBy(
+            if (onPreviousChannel != null || onNextChannel != null) 12.dp else 18.dp
+        ),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        onPreviousChannel?.let { action ->
+            PlayerRoundControl(Icons.Default.SkipPrevious, "Vorige zender", action, 44.dp)
+        }
         if (seekable) PlayerRoundControl(seekBackIcon, "10 seconden terug", onSeekBack, 44.dp)
         PlayerRoundControl(
             icon = if (isPlaying) pauseIcon else playIcon,
@@ -255,6 +264,9 @@ internal fun PremiumCenterControls(
             primary = true
         )
         if (seekable) PlayerRoundControl(seekForwardIcon, "10 seconden vooruit", onSeekForward, 44.dp)
+        onNextChannel?.let { action ->
+            PlayerRoundControl(Icons.Default.SkipNext, "Volgende zender", action, 44.dp)
+        }
     }
 }
 
