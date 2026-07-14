@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="launcher_background">#101316</color>
+    <color name="launcher_background">#04070B</color>
+    <color name="launcher_panel">#17140D</color>
     <color name="streamguide_canvas">#04070B</color>
     <color name="streamguide_gold">#FFB116</color>
+    <color name="streamguide_gold_bright">#FFC34B</color>
 </resources>
