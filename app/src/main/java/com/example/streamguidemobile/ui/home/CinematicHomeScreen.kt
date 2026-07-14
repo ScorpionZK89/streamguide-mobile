@@ -94,7 +94,7 @@ fun CinematicHomeScreen(
             Brush.verticalGradient(
                 0f to StreamGuideColors.CanvasTop,
                 0.34f to StreamGuideColors.Canvas,
-                1f to Color(0xFF020407)
+                1f to StreamGuideColors.CanvasDeep
             )
         )
     ) {
@@ -490,7 +490,7 @@ private fun MediaBadge(label: String, color: Color) {
             .background(color.copy(alpha = if (color == StreamGuideColors.Gold) 0.92f else 1f), RoundedCornerShape(5.dp))
             .padding(horizontal = 5.dp, vertical = 2.dp)
     ) {
-        Text(label, color = if (color == StreamGuideColors.Gold) Color(0xFF241500) else Color.White, style = StreamGuideTypography.Badge)
+        Text(label, color = if (color == StreamGuideColors.Gold) StreamGuideColors.OnGold else Color.White, style = StreamGuideTypography.Badge)
     }
 }
 
@@ -503,7 +503,7 @@ private fun CinematicActionButton(
     onClick: () -> Unit
 ) {
     val background = if (primary) StreamGuideColors.Gold else StreamGuideColors.PanelRaised.copy(alpha = 0.76f)
-    val content = if (primary) Color(0xFF241500) else StreamGuideColors.TextPrimary
+    val content = if (primary) StreamGuideColors.OnGold else StreamGuideColors.TextPrimary
     Row(
         modifier = Modifier
             .clip(RoundedCornerShape(StreamGuideRadii.Control))

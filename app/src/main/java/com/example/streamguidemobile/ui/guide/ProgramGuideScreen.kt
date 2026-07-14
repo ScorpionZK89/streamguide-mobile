@@ -163,7 +163,7 @@ fun ProgramGuideScreen(
 
     BoxWithConstraints(
         modifier = modifier.fillMaxSize().background(
-            Brush.verticalGradient(0f to CinematicColors.CanvasTop, 0.34f to CinematicColors.Canvas, 1f to Color(0xFF020407))
+            Brush.verticalGradient(0f to CinematicColors.CanvasTop, 0.34f to CinematicColors.Canvas, 1f to CinematicColors.CanvasDeep)
         )
     ) {
         val wide = maxWidth >= 720.dp || maxWidth > maxHeight
@@ -655,7 +655,7 @@ private fun GuideStatusStrip(state: StreamGuideState) {
     } ?: return
     Text(
         text,
-        color = if (state.error != null) Color(0xFFFFB4AB) else CinematicColors.TextSecondary,
+        color = if (state.error != null) CinematicColors.Error else CinematicColors.TextSecondary,
         style = CinematicTypography.Metadata,
         modifier = Modifier.fillMaxWidth().background(CinematicColors.PanelRaised.copy(alpha = 0.72f)).padding(horizontal = 12.dp, vertical = 6.dp),
         maxLines = 2

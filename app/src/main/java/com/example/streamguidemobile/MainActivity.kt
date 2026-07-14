@@ -2,7 +2,6 @@ package com.example.streamguidemobile
 
 import android.content.Intent
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
 import android.provider.Settings as AndroidSettings
 import android.widget.Toast
@@ -89,6 +88,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -101,6 +101,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.streamguidemobile.data.ChannelEntity
@@ -202,7 +203,7 @@ class MainActivity : FragmentActivity() {
     }
 
     private fun canInstallPackages(): Boolean =
-        Build.VERSION.SDK_INT < Build.VERSION_CODES.O || packageManager.canRequestPackageInstalls()
+        packageManager.canRequestPackageInstalls()
 
     private fun launchPackageInstaller(file: File) {
         runCatching {
@@ -233,6 +234,7 @@ private fun StreamGuideApp(viewModel: StreamGuideViewModel) {
     var selectedSeriesId by rememberSaveable { mutableStateOf<Long?>(null) }
     var destination by rememberSaveable { mutableStateOf(AppDestination.Home) }
     var showAddPlaylist by remember { mutableStateOf(false) }
+    val libraryStateHolder = rememberSaveableStateHolder()
 
     AppUpdateDialog(
         state = appUpdateState,
@@ -251,6 +253,11 @@ private fun StreamGuideApp(viewModel: StreamGuideViewModel) {
         val seriesCard = episode?.let { current -> state.seriesLibrary.allSeries.firstOrNull { it.series.id == current.seriesId } }
         val orderedEpisodes = seriesCard?.episodes?.orderedEpisodes().orEmpty().filter { !it.streamUrl.isNullOrBlank() }
         val episodeIndex = episode?.let { current -> orderedEpisodes.indexOfFirst { it.id == current.id } } ?: -1
+        val nextEpisode = if (episode != null && seriesCard != null) {
+            seriesCard.episodes.nextPlayableEpisode(episode)
+        } else {
+            null
+        }
         val liveChannels = state.homeRows.map { it.channel }.ifEmpty { state.channels }
         val liveIndex = castMedia?.takeIf { it.contentType == PlaybackContentType.LIVE }
             ?.let { media -> liveChannels.indexOfFirst { it.id == media.entityId } } ?: -1
@@ -266,8 +273,8 @@ private fun StreamGuideApp(viewModel: StreamGuideViewModel) {
             else -> null
         }
         val nextAction: (() -> Unit)? = when {
-            episodeIndex >= 0 && episodeIndex < orderedEpisodes.lastIndex && seriesCard != null -> ({
-                viewModel.playbackCoordinator.playOnCastIfConnected(orderedEpisodes[episodeIndex + 1].toPlaybackMedia(seriesCard.series))
+            nextEpisode != null && seriesCard != null -> ({
+                viewModel.playbackCoordinator.playOnCastIfConnected(nextEpisode.toPlaybackMedia(seriesCard.series))
             })
             liveIndex >= 0 && liveChannels.size > 1 -> ({
                 val next = liveChannels[(liveIndex + 1) % liveChannels.size]
@@ -383,44 +390,46 @@ private fun StreamGuideApp(viewModel: StreamGuideViewModel) {
     }
 
     val addBack: (() -> Unit)? = if (state.playlists.isEmpty()) null else ({ showAddPlaylist = false })
-    if (state.playlists.isEmpty() || showAddPlaylist) {
-        AddPlaylistScreen(
-            state = state,
-            viewModel = viewModel,
-            onBack = addBack
-        )
-    } else {
-        HomeScreen(
-            state = state,
-            viewModel = viewModel,
-            destination = destination,
-            selectedMovieId = selectedMovieId,
-            selectedSeriesId = selectedSeriesId,
-            onDestinationChange = { newDestination ->
-                destination = newDestination
-                if (newDestination != AppDestination.Movies) selectedMovieId = null
-                if (newDestination != AppDestination.Series) selectedSeriesId = null
-            },
-            onMovieSelected = { selectedMovieId = it },
-            onPlayMovie = { movie, restart ->
-                selectedMoviePlayback = movie.id to restart
-                viewModel.playbackCoordinator.playOnCastIfConnected(movie.toPlaybackMedia(restart))
-            },
-            onSeriesSelected = { selectedSeriesId = it },
-            onPlayEpisode = { episode, restart ->
-                selectedEpisodePlayback = episode.id to restart
-                state.seriesLibrary.allSeries.firstOrNull { it.series.id == episode.seriesId }?.series?.let { series ->
-                    viewModel.playbackCoordinator.playOnCastIfConnected(episode.toPlaybackMedia(series, restart))
+    libraryStateHolder.SaveableStateProvider("streamguide-library") {
+        if (state.playlists.isEmpty() || showAddPlaylist) {
+            AddPlaylistScreen(
+                state = state,
+                viewModel = viewModel,
+                onBack = addBack
+            )
+        } else {
+            HomeScreen(
+                state = state,
+                viewModel = viewModel,
+                destination = destination,
+                selectedMovieId = selectedMovieId,
+                selectedSeriesId = selectedSeriesId,
+                onDestinationChange = { newDestination ->
+                    destination = newDestination
+                    if (newDestination != AppDestination.Movies) selectedMovieId = null
+                    if (newDestination != AppDestination.Series) selectedSeriesId = null
+                },
+                onMovieSelected = { selectedMovieId = it },
+                onPlayMovie = { movie, restart ->
+                    selectedMoviePlayback = movie.id to restart
+                    viewModel.playbackCoordinator.playOnCastIfConnected(movie.toPlaybackMedia(restart))
+                },
+                onSeriesSelected = { selectedSeriesId = it },
+                onPlayEpisode = { episode, restart ->
+                    selectedEpisodePlayback = episode.id to restart
+                    state.seriesLibrary.allSeries.firstOrNull { it.series.id == episode.seriesId }?.series?.let { series ->
+                        viewModel.playbackCoordinator.playOnCastIfConnected(episode.toPlaybackMedia(series, restart))
+                    }
+                },
+                onAddPlaylist = { showAddPlaylist = true },
+                onOpen = { channel ->
+                    viewModel.markWatched(channel)
+                    selectedChannel = channel
+                    val program = state.homeRows.firstOrNull { it.channel.id == channel.id }?.currentProgram
+                    viewModel.playbackCoordinator.playOnCastIfConnected(channel.toLivePlaybackMedia(program))
                 }
-            },
-            onAddPlaylist = { showAddPlaylist = true },
-            onOpen = { channel ->
-                viewModel.markWatched(channel)
-                selectedChannel = channel
-                val program = state.homeRows.firstOrNull { it.channel.id == channel.id }?.currentProgram
-                viewModel.playbackCoordinator.playOnCastIfConnected(channel.toLivePlaybackMedia(program))
-            }
-        )
+            )
+        }
     }
 }
 
@@ -1117,7 +1126,7 @@ private fun SettingsToggleIndicator(checked: Boolean) {
     val thumbOffset by animateDpAsState(if (checked) 18.dp else 3.dp, tween(StreamGuideMotion.Quick), label = "settings-toggle-thumb")
     Box(Modifier.width(36.dp).height(20.dp).background(trackColor, CircleShape)) {
         Box(
-            Modifier.offset(x = thumbOffset, y = 3.dp).size(14.dp)
+            Modifier.offset { IntOffset(thumbOffset.roundToPx(), 3.dp.roundToPx()) }.size(14.dp)
                 .background(if (checked) MaterialTheme.colorScheme.onPrimary else CinematicColors.TextSecondary, CircleShape)
         )
     }

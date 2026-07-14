@@ -3,14 +3,14 @@
     <style name="Theme.StreamGuideMobile" parent="android:style/Theme.Material.NoActionBar">
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:fontFamily">sans</item>
-        <item name="android:colorAccent">#72D6C9</item>
+        <item name="android:colorAccent">@color/streamguide_gold</item>
     </style>
 
     <style name="ThemeOverlay.StreamGuideMobile.CastButton" parent="Theme.MediaRouter">
-        <item name="colorPrimary">@color/launcher_background</item>
-        <item name="colorPrimaryDark">@color/launcher_background</item>
-        <item name="colorAccent">#FF72D6C9</item>
-        <item name="android:colorBackground">@color/launcher_background</item>
+        <item name="colorPrimary">@color/streamguide_canvas</item>
+        <item name="colorPrimaryDark">@color/streamguide_canvas</item>
+        <item name="colorAccent">@color/streamguide_gold</item>
+        <item name="android:colorBackground">@color/streamguide_canvas</item>
         <item name="colorControlNormal">#FFFFFFFF</item>
         <item name="mediaRouteButtonTint">#FFFFFFFF</item>
     </style>

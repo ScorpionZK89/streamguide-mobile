@@ -31,6 +31,8 @@ import com.example.streamguidemobile.data.toMovieEntity
 import com.example.streamguidemobile.data.toParsedMovie
 import com.example.streamguidemobile.data.toSeriesEntity
 import com.example.streamguidemobile.data.parsedEpisodesToEntities
+import com.example.streamguidemobile.data.latestSeriesProgressEpisode
+import com.example.streamguidemobile.data.shouldReplaceSeriesProgress
 import com.example.streamguidemobile.data.withDetails
 import com.example.streamguidemobile.domain.isGroupVisible
 import com.example.streamguidemobile.ui.player.normalizedResumePosition
@@ -378,7 +380,8 @@ class StreamGuideViewModel(application: Application) : AndroidViewModel(applicat
             val watchedAt = if (storedPosition >= MIN_MOVIE_PROGRESS_MS) System.currentTimeMillis() else null
             episodeDao.updateProgress(episode.id, storedPosition, durationMs, watched, watchedAt)
             val series = seriesDao.getById(episode.seriesId) ?: return@launch
-            if (watchedAt != null && (episode.sortOrder >= series.progressOrder || series.progressEpisodeId == episode.id)) {
+            val currentProgress = series.progressEpisodeId?.let { episodeDao.getById(it) }
+            if (watchedAt != null && shouldReplaceSeriesProgress(currentProgress, episode)) {
                 seriesDao.updateProgress(series.id, episode.id, episode.sortOrder, watchedAt)
             }
         }
@@ -391,7 +394,10 @@ class StreamGuideViewModel(application: Application) : AndroidViewModel(applicat
             val timestamp = System.currentTimeMillis()
             episodeDao.setWatched(episode.id, watched, timestamp)
             val series = seriesDao.getById(episode.seriesId) ?: return@launch
-            if (watched && episode.sortOrder >= series.progressOrder) seriesDao.updateProgress(series.id, episode.id, episode.sortOrder, timestamp)
+            val currentProgress = series.progressEpisodeId?.let { episodeDao.getById(it) }
+            if (watched && shouldReplaceSeriesProgress(currentProgress, episode)) {
+                seriesDao.updateProgress(series.id, episode.id, episode.sortOrder, timestamp)
+            }
             else if (!watched && series.progressEpisodeId == episode.id) reconcileSeriesProgress(series.id, force = true)
         }
     }
@@ -407,7 +413,10 @@ class StreamGuideViewModel(application: Application) : AndroidViewModel(applicat
             }
             episodeDao.getForSeries(seriesId).filter { it.seasonNumber == seasonNumber }.maxByOrNull { it.sortOrder }?.let {
                 val series = seriesDao.getById(seriesId) ?: return@launch
-                if (it.sortOrder >= series.progressOrder) seriesDao.updateProgress(seriesId, it.id, it.sortOrder, timestamp)
+                val currentProgress = series.progressEpisodeId?.let { id -> episodeDao.getById(id) }
+                if (shouldReplaceSeriesProgress(currentProgress, it)) {
+                    seriesDao.updateProgress(seriesId, it.id, it.sortOrder, timestamp)
+                }
             }
         }
     }
@@ -416,7 +425,8 @@ class StreamGuideViewModel(application: Application) : AndroidViewModel(applicat
             val timestamp = System.currentTimeMillis()
             episodeDao.setSeriesWatched(seriesId, watched, timestamp)
             if (watched) {
-                episodeDao.getForSeries(seriesId).maxByOrNull { it.sortOrder }?.let { seriesDao.updateProgress(seriesId, it.id, it.sortOrder, timestamp) }
+                episodeDao.getForSeries(seriesId).latestSeriesProgressEpisode()
+                    ?.let { seriesDao.updateProgress(seriesId, it.id, it.sortOrder, timestamp) }
             } else seriesDao.updateProgress(seriesId, null, -1, null)
         }
     }
@@ -425,9 +435,8 @@ class StreamGuideViewModel(application: Application) : AndroidViewModel(applicat
     private suspend fun reconcileSeriesProgress(seriesId: Long, force: Boolean = false) {
         val series = seriesDao.getById(seriesId) ?: return
         val episodes = episodeDao.getForSeries(seriesId)
-        if (!force && episodes.any { it.id == series.progressEpisodeId }) return
-        val latest = episodes.filter { it.isWatched || it.playbackPositionMs > 0L }
-            .maxWithOrNull(compareBy<EpisodeEntity> { it.sortOrder }.thenBy { it.lastWatchedAt ?: Long.MIN_VALUE })
+        val latest = episodes.latestSeriesProgressEpisode()
+        if (!force && latest?.id == series.progressEpisodeId) return
         seriesDao.updateProgress(seriesId, latest?.id, latest?.sortOrder ?: -1, latest?.lastWatchedAt)
     }
 

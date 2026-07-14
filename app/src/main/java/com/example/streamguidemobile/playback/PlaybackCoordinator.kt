@@ -15,6 +15,7 @@ import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.exoplayer.ExoPlayer
+import com.example.streamguidemobile.BuildConfig
 import com.google.android.gms.cast.MediaStatus
 import com.google.android.gms.cast.framework.CastContext
 import com.google.android.gms.cast.framework.CastSession
@@ -222,7 +223,10 @@ class PlaybackCoordinator(context: Context) {
         }
         localPlayer?.let { existing ->
             if (localMedia?.mediaId == media.mediaId) return existing
-            releaseLocalEndpoint(existing)
+            if (!releaseLocalEndpoint(existing)) {
+                failExclusiveTransition("De vorige lokale stream kon niet volledig worden gestopt.")
+                return null
+            }
             // Compose can request the replacement before disposing the previous player effect.
             // Complete the old local lifecycle before starting the new stream.
             if (_state.value.status in localStatuses) {
@@ -271,10 +275,7 @@ class PlaybackCoordinator(context: Context) {
         localPlayer = player
         localListener = listener
         player.addListener(listener)
-        if (media.isLive) player.setMediaItem(media.toLocalMediaItem())
-        else player.setMediaItem(media.toLocalMediaItem(), media.startPositionMs.coerceAtLeast(0L))
-        player.prepare()
-        player.playWhenReady = media.playWhenReady
+        loadLocalMedia(player, media)
         return player
     }
 
@@ -282,7 +283,10 @@ class PlaybackCoordinator(context: Context) {
     @MainThread
     fun releaseLocalPlayer(player: Player) {
         if (player !== localPlayer) return
-        releaseLocalEndpoint(player)
+        val stopped = releaseLocalEndpoint(player)
+        if (!stopped) {
+            Log.w(TAG, "failure category=local_release mediaId=${_state.value.media?.mediaId ?: "none"}")
+        }
         if (_state.value.status in localStatuses) {
             transition(
                 PlaybackCoordinatorStatus.STOPPED,
@@ -293,9 +297,41 @@ class PlaybackCoordinator(context: Context) {
 
     /** Stops locally before handing the URL to another Android player. */
     @MainThread
-    fun stopLocalForExternalPlayback(player: Player) {
-        if (player === localPlayer) releaseLocalEndpoint(player)
+    fun stopLocalForExternalPlayback(player: Player): Boolean {
+        if (player !== localPlayer) return false
+        if (!releaseLocalEndpoint(player)) {
+            failExclusiveTransition("De lokale stream kon niet veilig worden gestopt.")
+            return false
+        }
         transition(PlaybackCoordinatorStatus.STOPPED, PlaybackCoordinatorState(localPlaybackAuthorized = true))
+        return true
+    }
+
+    /** Restarts the coordinator-owned local endpoint only after its previous load is idle. */
+    @MainThread
+    fun retryLocalPlayer(player: Player, media: PlaybackMedia): Boolean {
+        if (player !== localPlayer || isCastSessionAvailable || _state.value.blocksLocalPlayback) return false
+        if (_state.value.status !in localStatuses) return false
+        if (!stopLocalMedia(player)) {
+            failExclusiveTransition("De lokale stream kon niet veilig opnieuw worden gestart.")
+            return false
+        }
+        transition(
+            PlaybackCoordinatorStatus.STOPPED,
+            PlaybackCoordinatorState(localPlaybackAuthorized = true)
+        )
+        pendingMedia = media
+        localMedia = media
+        transition(
+            PlaybackCoordinatorStatus.LOCAL_STARTING,
+            PlaybackCoordinatorState(
+                status = PlaybackCoordinatorStatus.LOCAL_STARTING,
+                media = media,
+                localPlaybackAuthorized = true
+            )
+        )
+        loadLocalMedia(player, media)
+        return true
     }
 
     fun play() {
@@ -412,19 +448,6 @@ class PlaybackCoordinator(context: Context) {
         if (sourceMedia != null) {
             val snapshot = localPlayer?.let(::snapshotLocal)
             val transferMedia = snapshot?.let(sourceMedia::withPlaybackSnapshot) ?: sourceMedia
-            if (localPlayer != null) {
-                transition(
-                    PlaybackCoordinatorStatus.TRANSFERRING_TO_CAST,
-                    _state.value.copy(
-                        status = PlaybackCoordinatorStatus.TRANSFERRING_TO_CAST,
-                        media = transferMedia,
-                        positionMs = transferMedia.startPositionMs,
-                        localPlaybackAuthorized = false,
-                        errorMessage = null
-                    )
-                )
-                localPlayer?.let(::releaseLocalEndpoint)
-            }
             pendingMedia = transferMedia
             queueCastLoad(transferMedia)
         } else {
@@ -450,7 +473,13 @@ class PlaybackCoordinator(context: Context) {
         castLoadJob?.cancel()
         castLoadJob = scope.launch {
             if (debounce) delay(CAST_SWITCH_DEBOUNCE_MS)
-            if (localPlayer != null) {
+            if (_state.value.status in localStatuses && localPlayer != null && isRemoteEndpointActive()) {
+                if (!releaseLocalEndpoint(checkNotNull(localPlayer))) {
+                    failExclusiveTransition("De lokale stream kon niet volledig worden gestopt.")
+                    return@launch
+                }
+            }
+            if (_state.value.status in localStatuses) {
                 transition(
                     PlaybackCoordinatorStatus.TRANSFERRING_TO_CAST,
                     _state.value.copy(
@@ -459,9 +488,16 @@ class PlaybackCoordinator(context: Context) {
                         localPlaybackAuthorized = false
                     )
                 )
-                localPlayer?.let(::releaseLocalEndpoint)
             }
-            check(localPlayer == null) { "Local player must be released before Cast can load." }
+            if (localPlayer != null && _state.value.status != PlaybackCoordinatorStatus.TRANSFERRING_TO_CAST) {
+                failExclusiveTransition("De lokale speler bevindt zich in een onveilige overgangstoestand.")
+                return@launch
+            }
+            val localStopped = localPlayer?.let(::releaseLocalEndpoint) ?: true
+            if (!localStopped || localPlayer != null) {
+                failExclusiveTransition("De lokale stream kon niet volledig worden gestopt.")
+                return@launch
+            }
             yield()
             if (!isCastSessionAvailable) {
                 failCast("Afspelen op Chromecast is mislukt.")
@@ -522,16 +558,32 @@ class PlaybackCoordinator(context: Context) {
         player.trackSelectionParameters = builder.build()
     }
 
-    private fun releaseLocalEndpoint(player: Player) {
-        if (player !== localPlayer) return
-        localListener?.let(player::removeListener)
-        localListener = null
+    private fun loadLocalMedia(player: Player, media: PlaybackMedia) {
+        if (media.isLive) player.setMediaItem(media.toLocalMediaItem())
+        else player.setMediaItem(media.toLocalMediaItem(), media.startPositionMs.coerceAtLeast(0L))
+        player.prepare()
+        player.playWhenReady = media.playWhenReady
+    }
+
+    private fun stopLocalMedia(player: Player): Boolean {
         player.playWhenReady = false
         player.stop()
         player.clearMediaItems()
+        return player.playbackState == Player.STATE_IDLE && player.mediaItemCount == 0 && !player.isLoading
+    }
+
+    private fun releaseLocalEndpoint(player: Player): Boolean {
+        if (player !== localPlayer) return localPlayer == null
+        localListener?.let(player::removeListener)
+        localListener = null
+        val stopped = stopLocalMedia(player)
         player.release()
         localPlayer = null
         localMedia = null
+        if (BuildConfig.DEBUG) {
+            Log.d(TAG, "local_release confirmed=$stopped mediaId=${_state.value.media?.mediaId ?: "none"}")
+        }
+        return stopped
     }
 
     private fun snapshotLocal(player: Player): PlaybackSnapshot = PlaybackSnapshot(
@@ -625,6 +677,22 @@ class PlaybackCoordinator(context: Context) {
     private fun failCast(message: String) {
         castLoadJob?.cancel()
         localPlayer?.let(::releaseLocalEndpoint)
+        Log.w(TAG, "failure category=cast status=${_state.value.status} mediaId=${_state.value.media?.mediaId ?: "none"}")
+        transition(
+            PlaybackCoordinatorStatus.ERROR,
+            _state.value.copy(
+                status = PlaybackCoordinatorStatus.ERROR,
+                isPlaying = false,
+                canSeek = false,
+                errorMessage = message,
+                localPlaybackAuthorized = false
+            )
+        )
+    }
+
+    private fun failExclusiveTransition(message: String) {
+        castLoadJob?.cancel()
+        Log.w(TAG, "failure category=exclusive_transition status=${_state.value.status} mediaId=${_state.value.media?.mediaId ?: "none"}")
         transition(
             PlaybackCoordinatorStatus.ERROR,
             _state.value.copy(
@@ -651,9 +719,40 @@ class PlaybackCoordinator(context: Context) {
 
     private fun transition(to: PlaybackCoordinatorStatus, next: PlaybackCoordinatorState) {
         val from = _state.value.status
+        logTransition("begin", from, to, next)
         check(PlaybackTransitionRules.canTransition(from, to)) { "Illegal playback transition: $from -> $to" }
-        check(!(to in castOnlyStatuses && localPlayer != null)) { "Cast state cannot own a local player." }
+        val localActive = localPlayer != null
+        val receiverActive = isRemoteEndpointActive()
+        if (BuildConfig.DEBUG) {
+            check(!(localActive && receiverActive)) { "Local and Cast endpoints cannot be active together." }
+            check(!(to in localStatuses && receiverActive)) { "Local playback cannot start while the Receiver is active." }
+            check(!(to in castOnlyStatuses && localActive)) { "Cast playback cannot start while a local player is active." }
+        }
         _state.value = next.copy(status = to)
+        logTransition("end", from, to, _state.value)
+    }
+
+    private fun isRemoteEndpointActive(): Boolean {
+        val player = castPlayer ?: return false
+        return player.isCastSessionAvailable &&
+            (player.currentMediaItem != null || player.playbackState != Player.STATE_IDLE || player.isLoading)
+    }
+
+    private fun logTransition(
+        phase: String,
+        from: PlaybackCoordinatorStatus,
+        to: PlaybackCoordinatorStatus,
+        next: PlaybackCoordinatorState
+    ) {
+        if (!BuildConfig.DEBUG) return
+        val localState = localPlayer?.playbackState?.toString() ?: "none"
+        val receiverState = castPlayer?.playbackState?.toString() ?: "none"
+        Log.d(
+            TAG,
+            "transition=$phase from=$from to=$to mediaId=${next.media?.mediaId ?: "none"} " +
+                "localOwned=${localPlayer != null} localState=$localState " +
+                "receiverActive=${isRemoteEndpointActive()} receiverState=$receiverState"
+        )
     }
 
     private fun currentCastDeviceName(): String? =

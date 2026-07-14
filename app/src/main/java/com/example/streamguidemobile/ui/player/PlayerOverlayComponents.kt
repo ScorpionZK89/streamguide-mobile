@@ -46,6 +46,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -267,7 +268,7 @@ internal fun SeekableTimeline(
     modifier: Modifier = Modifier
 ) {
     val safeDuration = duration.coerceAtLeast(1L)
-    var scrubValue by remember(position, safeDuration) { mutableStateOf(position.coerceIn(0L, safeDuration).toFloat()) }
+    var scrubValue by remember(position, safeDuration) { mutableFloatStateOf(position.coerceIn(0L, safeDuration).toFloat()) }
     Column(modifier, verticalArrangement = Arrangement.spacedBy(1.dp)) {
         val playedFraction = (scrubValue / safeDuration).coerceIn(0f, 1f)
         val bufferedFraction = (bufferedPosition.toFloat() / safeDuration).coerceIn(0f, 1f)
@@ -764,7 +765,7 @@ internal fun PlayerBadge(label: String, color: Color) {
             .background(color.copy(alpha = 0.94f), RoundedCornerShape(5.dp))
             .padding(horizontal = 6.dp, vertical = 3.dp)
     ) {
-        Text(label, color = if (color == CinematicColors.Gold) Color(0xFF231500) else Color.White, style = CinematicTypography.Badge)
+        Text(label, color = if (color == CinematicColors.Gold) CinematicColors.OnGold else Color.White, style = CinematicTypography.Badge)
     }
 }
 
@@ -854,7 +855,7 @@ private fun PlayerTextButton(label: String, primary: Boolean = false, onClick: (
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 9.dp)
     ) {
-        Text(label, color = if (primary) Color(0xFF241500) else Color.White, style = CinematicTypography.Badge)
+        Text(label, color = if (primary) CinematicColors.OnGold else Color.White, style = CinematicTypography.Badge)
     }
 }
 

@@ -555,14 +555,14 @@ private fun MediaBadge(label: String, color: Color) {
             .background(color.copy(alpha = if (color == CinematicColors.Gold) 0.92f else 1f), RoundedCornerShape(4.dp))
             .padding(horizontal = 4.dp, vertical = 1.dp)
     ) {
-        Text(label, color = if (color == CinematicColors.Gold) Color(0xFF241500) else Color.White, style = CinematicTypography.Badge)
+        Text(label, color = if (color == CinematicColors.Gold) CinematicColors.OnGold else Color.White, style = CinematicTypography.Badge)
     }
 }
 
 @Composable
 private fun CinematicTextAction(label: String, icon: ImageVector, primary: Boolean = false, onClick: () -> Unit) {
     val background = if (primary) CinematicColors.Gold else CinematicColors.PanelRaised.copy(alpha = 0.8f)
-    val content = if (primary) Color(0xFF241500) else CinematicColors.TextPrimary
+    val content = if (primary) CinematicColors.OnGold else CinematicColors.TextPrimary
     Row(
         modifier = Modifier
             .height(33.dp)

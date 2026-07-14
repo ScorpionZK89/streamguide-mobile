@@ -66,6 +66,7 @@ import com.example.streamguidemobile.ui.live.CinematicEmptyState
 import com.example.streamguidemobile.ui.live.CinematicIconAction
 import com.example.streamguidemobile.ui.live.CinematicSearchField
 import com.example.streamguidemobile.ui.theme.*
+import java.util.Locale
 
 @Composable
 fun SeriesScreen(
@@ -114,7 +115,7 @@ fun SeriesScreen(
     BackHandler(enabled = showFilters || showSort || showGroups || searchVisible) {
         when { showFilters -> showFilters = false; showSort -> showSort = false; showGroups -> showGroups = false; queryText.isNotBlank() -> { queryText = ""; onQueryChange("") }; else -> searchVisible = false }
     }
-    BoxWithConstraints(modifier.fillMaxSize().background(Brush.verticalGradient(listOf(CinematicColors.CanvasTop, CinematicColors.Canvas, Color(0xFF020407))))) {
+    BoxWithConstraints(modifier.fillMaxSize().background(Brush.verticalGradient(listOf(CinematicColors.CanvasTop, CinematicColors.Canvas, CinematicColors.CanvasDeep)))) {
         val wide = maxWidth >= 720.dp
         val compactLandscape = maxHeight < 520.dp
         val pagePadding = if (wide) StreamGuideSpacing.Xl else 14.dp
@@ -416,7 +417,7 @@ private fun SeriesContinueCard(
     var confirmation by remember { mutableStateOf<BulkSeriesAction?>(null) }
     val episodes = seasons[selectedSeason].orEmpty()
     val episodeListState = rememberLazyListState()
-    BoxWithConstraints(modifier.fillMaxSize().background(Brush.verticalGradient(listOf(CinematicColors.CanvasTop, CinematicColors.Canvas, Color(0xFF020407))))) {
+    BoxWithConstraints(modifier.fillMaxSize().background(Brush.verticalGradient(listOf(CinematicColors.CanvasTop, CinematicColors.Canvas, CinematicColors.CanvasDeep)))) {
         val wide = maxWidth >= 720.dp
         val padding = if (wide) StreamGuideSpacing.Xl else 14.dp
         LazyColumn(
@@ -581,7 +582,7 @@ private sealed interface BulkSeriesAction { data class Season(val number: Int, v
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(metadata.ifBlank { card.series.categoryName }, color = CinematicColors.TextMuted, style = CinematicTypography.Metadata, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
         card.quality?.let { SeriesBadge(it, CinematicColors.Gold) }
-        card.series.rating?.let { SeriesBadge(String.format("%.1f", it), CinematicColors.PanelPressed) }
+        card.series.rating?.let { SeriesBadge(String.format(Locale.getDefault(), "%.1f", it), CinematicColors.PanelPressed) }
     }
 }
 
@@ -599,7 +600,7 @@ private sealed interface BulkSeriesAction { data class Season(val number: Int, v
             else -> CinematicColors.PanelRaised.copy(alpha = .88f)
         }, tween(StreamGuideMotion.Quick), label = "series-action-background"
     )
-    val color = if (primary) Color(0xFF241500) else if (focused) CinematicColors.GoldBright else CinematicColors.TextPrimary
+    val color = if (primary) CinematicColors.OnGold else if (focused) CinematicColors.GoldBright else CinematicColors.TextPrimary
     Row(
         Modifier.height(36.dp).widthIn(max = 190.dp).onFocusChanged { focused = it.isFocused }.focusable(interactionSource = interaction)
             .clip(shape).background(bg).border(1.dp, if (focused) CinematicColors.GoldBright else if (primary) CinematicColors.Gold else CinematicColors.BorderStrong, shape)
@@ -644,13 +645,13 @@ private sealed interface BulkSeriesAction { data class Season(val number: Int, v
         }
     }
 }
-@Composable private fun SeriesBadge(label: String, color: Color, modifier: Modifier = Modifier) { Box(modifier.background(color.copy(alpha = .92f), RoundedCornerShape(5.dp)).padding(horizontal = 5.dp, vertical = 2.dp)) { Text(label, color = if (color == CinematicColors.Gold) Color(0xFF241500) else CinematicColors.TextPrimary, style = CinematicTypography.Badge) } }
+@Composable private fun SeriesBadge(label: String, color: Color, modifier: Modifier = Modifier) { Box(modifier.background(color.copy(alpha = .92f), RoundedCornerShape(StreamGuideRadii.Badge)).padding(horizontal = 5.dp, vertical = 2.dp)) { Text(label, color = if (color == CinematicColors.Gold) CinematicColors.OnGold else CinematicColors.TextPrimary, style = CinematicTypography.Badge) } }
 @Composable private fun SeriesProgressBar(progress: Float, modifier: Modifier = Modifier) {
     Box(modifier.height(3.dp).background(CinematicColors.BorderStrong)) {
         Box(Modifier.fillMaxWidth(progress.coerceIn(0f, 1f)).fillMaxHeight().background(CinematicColors.Gold))
     }
 }
-@Composable private fun CountBadge(count: Int, modifier: Modifier) { Box(modifier.size(14.dp).background(CinematicColors.Gold, CircleShape), contentAlignment = Alignment.Center) { Text(count.coerceAtMost(9).toString(), color = Color(0xFF241500), style = CinematicTypography.Badge) } }
+@Composable private fun CountBadge(count: Int, modifier: Modifier) { Box(modifier.size(14.dp).background(CinematicColors.Gold, CircleShape), contentAlignment = Alignment.Center) { Text(count.coerceAtMost(9).toString(), color = CinematicColors.OnGold, style = CinematicTypography.Badge) } }
 @Composable private fun SeriesStatus(title: String, description: String, action: String, onAction: () -> Unit) {
     Column(Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
         Column(

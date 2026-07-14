@@ -98,7 +98,7 @@ fun LiveTvScreen(
             Brush.verticalGradient(
                 0f to CinematicColors.CanvasTop,
                 0.32f to CinematicColors.Canvas,
-                1f to Color(0xFF020407)
+                1f to CinematicColors.CanvasDeep
             )
         )
     ) {
@@ -294,7 +294,7 @@ private fun StatusStrip(state: StreamGuideState) {
     } ?: return
     Text(
         text,
-        color = if (state.error != null) Color(0xFFFFB4AB) else CinematicColors.TextSecondary,
+        color = if (state.error != null) CinematicColors.Error else CinematicColors.TextSecondary,
         style = CinematicTypography.Metadata,
         modifier = Modifier.fillMaxWidth().background(CinematicColors.PanelRaised.copy(alpha = 0.72f)).padding(horizontal = 14.dp, vertical = 7.dp),
         maxLines = 2

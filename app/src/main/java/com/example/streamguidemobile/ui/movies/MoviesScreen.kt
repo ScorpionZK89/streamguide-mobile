@@ -95,6 +95,7 @@ import com.example.streamguidemobile.ui.theme.StreamGuideSpacing
 import com.example.streamguidemobile.ui.theme.StreamGuideTheme
 import java.time.Instant
 import java.time.ZoneId
+import java.util.Locale
 
 @Composable
 fun MoviesScreen(
@@ -156,7 +157,7 @@ fun MoviesScreen(
 
     BoxWithConstraints(
         modifier.fillMaxSize().background(
-            Brush.verticalGradient(listOf(CinematicColors.CanvasTop, CinematicColors.Canvas, Color(0xFF020407)))
+            Brush.verticalGradient(listOf(CinematicColors.CanvasTop, CinematicColors.Canvas, CinematicColors.CanvasDeep))
         )
     ) {
         val wide = maxWidth >= 720.dp
@@ -473,7 +474,7 @@ private fun MovieMetadataLine(movie: MovieEntity) {
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(metadata.joinToString(" • ").ifBlank { movie.categoryName }, color = CinematicColors.TextSecondary, style = CinematicTypography.Metadata, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
         movie.qualityBadge()?.let { MovieBadge(it, CinematicColors.Gold) }
-        movie.rating?.let { MovieBadge(String.format("%.1f", it), CinematicColors.PanelPressed) }
+        movie.rating?.let { MovieBadge(String.format(Locale.getDefault(), "%.1f", it), CinematicColors.PanelPressed) }
     }
 }
 
@@ -495,7 +496,7 @@ private fun MovieAction(label: String, icon: androidx.compose.ui.graphics.vector
     var focused by remember { mutableStateOf(false) }
     val shape = RoundedCornerShape(StreamGuideRadii.Control)
     val background = if (primary) CinematicColors.Gold else if (focused) CinematicColors.PanelPressed else CinematicColors.PanelRaised.copy(alpha = 0.88f)
-    val content = if (primary) Color(0xFF241500) else if (focused) CinematicColors.GoldBright else CinematicColors.TextPrimary
+    val content = if (primary) CinematicColors.OnGold else if (focused) CinematicColors.GoldBright else CinematicColors.TextPrimary
     Row(
         Modifier.height(34.dp).widthIn(max = 190.dp).onFocusChanged { focused = it.isFocused }.clip(shape).background(background)
             .border(1.dp, if (focused) CinematicColors.GoldBright else if (primary) CinematicColors.Gold else CinematicColors.BorderStrong, shape)
@@ -536,14 +537,14 @@ private fun MovieArtwork(url: String?, description: String?, scale: ContentScale
 @Composable
 private fun MovieBadge(label: String, color: Color, modifier: Modifier = Modifier) {
     Box(modifier.background(color.copy(alpha = 0.92f), RoundedCornerShape(5.dp)).padding(horizontal = 5.dp, vertical = 2.dp)) {
-        Text(label, color = if (color == CinematicColors.Gold) Color(0xFF241500) else CinematicColors.TextPrimary, style = CinematicTypography.Badge)
+        Text(label, color = if (color == CinematicColors.Gold) CinematicColors.OnGold else CinematicColors.TextPrimary, style = CinematicTypography.Badge)
     }
 }
 
 @Composable
 private fun MovieCountBadge(count: Int, modifier: Modifier = Modifier) {
     Box(modifier.size(14.dp).background(CinematicColors.Gold, CircleShape), contentAlignment = Alignment.Center) {
-        Text(count.coerceAtMost(9).toString(), color = Color(0xFF241500), style = CinematicTypography.Badge)
+        Text(count.coerceAtMost(9).toString(), color = CinematicColors.OnGold, style = CinematicTypography.Badge)
     }
 }
 

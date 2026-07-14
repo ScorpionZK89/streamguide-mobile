@@ -1,7 +1,9 @@
 package com.example.streamguidemobile.data
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SeriesMetadataTest {
@@ -56,6 +58,29 @@ class SeriesMetadataTest {
 
         assertEquals(nextSeason, listOf(nextSeason, unavailable, current).nextPlayableEpisode(current))
         assertNull(listOf(current, unavailable).nextPlayableEpisode(current))
+    }
+
+    @Test
+    fun nextRegularEpisodeNeverStartsSpecialsAfterSeasonFinale() {
+        val finale = episode(1L, "finale", 2, 8, 0L, true).copy(sortOrder = 8)
+        val special = episode(2L, "special", 0, 1, 0L, false).copy(sortOrder = 9)
+        val earlierSpecial = episode(3L, "earlier-special", 0, 0, 0L, true).copy(sortOrder = 7)
+
+        assertNull(listOf(special, finale).nextPlayableEpisode(finale))
+        assertEquals(
+            special,
+            listOf(special, finale, earlierSpecial).nextPlayableEpisode(earlierSpecial)
+        )
+    }
+
+    @Test
+    fun regularProgressTakesPriorityOverLaterSpecials() {
+        val regular = episode(1L, "regular", 2, 8, 20_000L, true).copy(sortOrder = 8, lastWatchedAt = 10L)
+        val special = episode(2L, "special", 0, 1, 20_000L, true).copy(sortOrder = 99, lastWatchedAt = 20L)
+
+        assertFalse(shouldReplaceSeriesProgress(regular, special))
+        assertTrue(shouldReplaceSeriesProgress(special, regular))
+        assertEquals(regular, listOf(special, regular).latestSeriesProgressEpisode())
     }
 
     private fun parsedEpisode(providerId: String, season: Int, number: Int?, order: Int) = ParsedEpisode(

@@ -224,9 +224,16 @@ fun PremiumPlayerScreen(
         externalIntent.resolveActivity(context.packageManager) != null
     }
     fun openExternal() {
-        coordinator.stopLocalForExternalPlayback(player)
-        onBack()
-        runCatching { context.startActivity(externalIntent) }
+        if (coordinator.stopLocalForExternalPlayback(player)) {
+            onBack()
+            runCatching { context.startActivity(externalIntent) }
+        } else {
+            playerFailure = PlayerFailure(
+                "Veilige overgang mislukt",
+                "De lokale stream kon niet volledig worden gestopt. Er is geen externe stream gestart."
+            )
+            controlsVisible = true
+        }
     }
 
     DisposableEffect(activity) {
@@ -432,11 +439,15 @@ fun PremiumPlayerScreen(
 
     fun retry() {
         playerFailure = null
-        playbackState = Player.STATE_BUFFERING
         revealControls()
-        player.setMediaItem(playbackMedia.toLocalMediaItem())
-        player.prepare()
-        player.playWhenReady = true
+        if (coordinator.retryLocalPlayer(player, playbackMedia)) {
+            playbackState = Player.STATE_BUFFERING
+        } else {
+            playerFailure = PlayerFailure(
+                "Veilige overgang mislukt",
+                "De stream kon niet veilig opnieuw worden gestart. Probeer het afspeelscherm opnieuw te openen."
+            )
+        }
     }
 
     val gestureModifier = Modifier.playerTouchGestures(

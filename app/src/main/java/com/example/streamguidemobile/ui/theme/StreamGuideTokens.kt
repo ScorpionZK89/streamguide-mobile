@@ -9,6 +9,7 @@ import androidx.compose.ui.unit.sp
 
 object CinematicColors {
     val Canvas = Color(0xFF04070B)
+    val CanvasDeep = Color(0xFF020407)
     val CanvasTop = Color(0xFF08111A)
     val Panel = Color(0xFF0A1017)
     val PanelRaised = Color(0xFF111922)
@@ -16,12 +17,15 @@ object CinematicColors {
     val Gold = Color(0xFFFFB116)
     val GoldBright = Color(0xFFFFC34B)
     val GoldMuted = Color(0xFF332407)
+    val OnGold = Color(0xFF241500)
     val TextPrimary = Color(0xFFF5F7FA)
     val TextSecondary = Color(0xFFAAB4C0)
     val TextMuted = Color(0xFF778390)
     val Border = Color(0x12FFFFFF)
     val BorderStrong = Color(0x28FFFFFF)
     val Live = Color(0xFFE5484D)
+    val Error = Color(0xFFFF7D78)
+    val ErrorContainer = Color(0xFF55201E)
     val Scrim = Color(0xE606090D)
 }
 
@@ -35,6 +39,8 @@ object StreamGuideSpacing {
 }
 
 object StreamGuideRadii {
+    val Badge = 5.dp
+    val Small = 6.dp
     val Control = 9.dp
     val Card = 10.dp
     val Hero = 14.dp

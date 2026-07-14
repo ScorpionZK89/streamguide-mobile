@@ -132,7 +132,27 @@ fun List<EpisodeEntity>.nextPlayableEpisode(current: EpisodeEntity): EpisodeEnti
     val ordered = orderedEpisodes()
     val index = ordered.indexOfFirst { it.id == current.id }
     if (index < 0) return null
-    return ordered.drop(index + 1).firstOrNull { !it.streamUrl.isNullOrBlank() }
+    val currentIsRegular = current.seasonNumber > 0
+    return ordered.drop(index + 1).firstOrNull {
+        !it.streamUrl.isNullOrBlank() && (it.seasonNumber > 0) == currentIsRegular
+    }
+}
+
+fun shouldReplaceSeriesProgress(current: EpisodeEntity?, candidate: EpisodeEntity): Boolean {
+    if (current == null || current.id == candidate.id) return true
+    val currentIsRegular = current.seasonNumber > 0
+    val candidateIsRegular = candidate.seasonNumber > 0
+    if (currentIsRegular != candidateIsRegular) return candidateIsRegular
+    return candidate.sortOrder >= current.sortOrder
+}
+
+fun List<EpisodeEntity>.latestSeriesProgressEpisode(): EpisodeEntity? {
+    val progressed = filter { it.isWatched || it.playbackPositionMs > 0L }
+    val candidates = progressed.filter { it.seasonNumber > 0 }.ifEmpty { progressed }
+    return candidates.maxWithOrNull(
+        compareBy<EpisodeEntity> { it.sortOrder }
+            .thenBy { it.lastWatchedAt ?: Long.MIN_VALUE }
+    )
 }
 
 private val parsedEpisodeComparator = compareBy<ParsedEpisode>(

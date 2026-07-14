@@ -26,6 +26,18 @@ class PlaybackTransitionRulesTest {
     fun `local to cast must pass through transfer state`() {
         assertFalse(
             PlaybackTransitionRules.canTransition(
+                PlaybackCoordinatorStatus.LOCAL_STARTING,
+                PlaybackCoordinatorStatus.CAST_STARTING
+            )
+        )
+        assertTrue(
+            PlaybackTransitionRules.canTransition(
+                PlaybackCoordinatorStatus.LOCAL_STARTING,
+                PlaybackCoordinatorStatus.TRANSFERRING_TO_CAST
+            )
+        )
+        assertFalse(
+            PlaybackTransitionRules.canTransition(
                 PlaybackCoordinatorStatus.LOCAL_PLAYBACK,
                 PlaybackCoordinatorStatus.CAST_STARTING
             )
