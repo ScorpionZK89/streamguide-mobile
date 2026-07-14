@@ -121,8 +121,10 @@ import com.example.streamguidemobile.ui.home.CinematicHomeScreen
 import com.example.streamguidemobile.ui.guide.ProgramGuideScreen
 import com.example.streamguidemobile.ui.live.LiveTvScreen
 import com.example.streamguidemobile.ui.navigation.AppDestination
+import com.example.streamguidemobile.ui.navigation.StartupContent
 import com.example.streamguidemobile.ui.navigation.StreamGuideBottomNavigation
 import com.example.streamguidemobile.ui.navigation.StreamGuideNavigationRail
+import com.example.streamguidemobile.ui.navigation.resolveStartupContent
 import com.example.streamguidemobile.ui.movies.MoviesScreen
 import com.example.streamguidemobile.ui.series.SeriesScreen
 import com.example.streamguidemobile.ui.player.PremiumPlayerScreen
@@ -389,16 +391,17 @@ private fun StreamGuideApp(viewModel: StreamGuideViewModel) {
         } else LaunchedEffect(episodeId) { selectedEpisodePlayback = null }
     }
 
+    val startupContent = resolveStartupContent(
+        isContentReady = state.isContentReady,
+        hasPlaylists = state.playlists.isNotEmpty(),
+        addPlaylistRequested = showAddPlaylist
+    )
     val addBack: (() -> Unit)? = if (state.playlists.isEmpty()) null else ({ showAddPlaylist = false })
     libraryStateHolder.SaveableStateProvider("streamguide-library") {
-        if (state.playlists.isEmpty() || showAddPlaylist) {
-            AddPlaylistScreen(
-                state = state,
-                viewModel = viewModel,
-                onBack = addBack
-            )
-        } else {
-            HomeScreen(
+        when (startupContent) {
+            StartupContent.Loading -> StartupLoadingScreen()
+            StartupContent.PlaylistSetup -> AddPlaylistScreen(state = state, viewModel = viewModel, onBack = addBack)
+            StartupContent.Library -> HomeScreen(
                 state = state,
                 viewModel = viewModel,
                 destination = destination,
@@ -430,6 +433,18 @@ private fun StreamGuideApp(viewModel: StreamGuideViewModel) {
                 }
             )
         }
+    }
+}
+
+@Composable
+private fun StartupLoadingScreen() {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(CinematicColors.CanvasDeep),
+        contentAlignment = Alignment.Center
+    ) {
+        CircularProgressIndicator(color = CinematicColors.Gold, strokeWidth = 2.dp)
     }
 }
 

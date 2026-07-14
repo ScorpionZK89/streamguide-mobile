@@ -10,6 +10,7 @@ import com.example.streamguidemobile.ui.guide.GuideTimelineTest
 import com.example.streamguidemobile.ui.home.HomeModelsTest
 import com.example.streamguidemobile.ui.live.LiveGuideComponentsTest
 import com.example.streamguidemobile.ui.movies.MovieModelsTest
+import com.example.streamguidemobile.ui.navigation.StartupRoutingTest
 import com.example.streamguidemobile.ui.player.PlayerModelsTest
 import com.example.streamguidemobile.ui.series.SeriesModelsTest
 import com.example.streamguidemobile.update.AppUpdateRepositoryTest
@@ -28,6 +29,7 @@ import org.junit.runners.Suite
     HomeModelsTest::class,
     LiveGuideComponentsTest::class,
     MovieModelsTest::class,
+    StartupRoutingTest::class,
     PlayerModelsTest::class,
     SeriesModelsTest::class,
     AppUpdateRepositoryTest::class

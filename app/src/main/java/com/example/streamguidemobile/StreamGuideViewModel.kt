@@ -188,7 +188,8 @@ class StreamGuideViewModel(application: Application) : AndroidViewModel(applicat
             selectedGroup = filter.selectedGroup,
             showFavorites = filter.showFavorites,
             showRecent = filter.showRecent,
-            nowMillis = snapshot.now
+            nowMillis = snapshot.now,
+            isContentReady = true
         )
     }
 
@@ -1015,6 +1016,7 @@ data class StreamGuideState(
     val showRecent: Boolean = false,
     val settings: AppSettings = AppSettings(),
     val nowMillis: Long = System.currentTimeMillis(),
+    val isContentReady: Boolean = false,
     val isLoading: Boolean = false,
     val message: String? = null,
     val error: String? = null
