@@ -576,14 +576,21 @@ class PlaybackCoordinator(context: Context) {
         if (player !== localPlayer) return localPlayer == null
         localListener?.let(player::removeListener)
         localListener = null
-        val stopped = stopLocalMedia(player)
-        player.release()
+        val outcome = releaseLocalEndpointSafely(
+            stopAndClear = { stopLocalMedia(player) },
+            release = player::release
+        )
         localPlayer = null
         localMedia = null
         if (BuildConfig.DEBUG) {
-            Log.d(TAG, "local_release confirmed=$stopped mediaId=${_state.value.media?.mediaId ?: "none"}")
+            Log.d(
+                TAG,
+                "local_release stopConfirmed=${outcome.stopConfirmed} released=${outcome.releaseCompleted} " +
+                    "mediaId=${_state.value.media?.mediaId ?: "none"}"
+            )
         }
-        return stopped
+        outcome.failure?.let { error -> Log.w(TAG, "Local player release failed.", error) }
+        return outcome.releaseCompleted
     }
 
     private fun snapshotLocal(player: Player): PlaybackSnapshot = PlaybackSnapshot(

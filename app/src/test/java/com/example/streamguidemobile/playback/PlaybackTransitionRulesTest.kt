@@ -7,6 +7,47 @@ import org.junit.Test
 
 class PlaybackTransitionRulesTest {
     @Test
+    fun `released local endpoint is safe even while stop state is still settling`() {
+        var released = false
+
+        val outcome = releaseLocalEndpointSafely(
+            stopAndClear = { false },
+            release = { released = true }
+        )
+
+        assertFalse(outcome.stopConfirmed)
+        assertTrue(outcome.releaseCompleted)
+        assertTrue(released)
+    }
+
+    @Test
+    fun `local endpoint release is still attempted after a stop exception`() {
+        var released = false
+
+        val outcome = releaseLocalEndpointSafely(
+            stopAndClear = { error("stop failed") },
+            release = { released = true }
+        )
+
+        assertFalse(outcome.stopConfirmed)
+        assertTrue(outcome.releaseCompleted)
+        assertTrue(released)
+        assertEquals("stop failed", outcome.failure?.message)
+    }
+
+    @Test
+    fun `failed local release keeps the transition blocked`() {
+        val outcome = releaseLocalEndpointSafely(
+            stopAndClear = { true },
+            release = { error("release failed") }
+        )
+
+        assertTrue(outcome.stopConfirmed)
+        assertFalse(outcome.releaseCompleted)
+        assertEquals("release failed", outcome.failure?.message)
+    }
+
+    @Test
     fun replacingLocalMediaStopsOldEndpointBeforeStartingNewEndpoint() {
         assertTrue(
             PlaybackTransitionRules.canTransition(

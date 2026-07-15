@@ -85,6 +85,26 @@ data class PlaybackSnapshot(
     val selectedSubtitleLanguage: String? = null
 )
 
+internal data class LocalEndpointReleaseOutcome(
+    val stopConfirmed: Boolean,
+    val releaseCompleted: Boolean,
+    val failure: Throwable? = null
+)
+
+internal fun releaseLocalEndpointSafely(
+    stopAndClear: () -> Boolean,
+    release: () -> Unit
+): LocalEndpointReleaseOutcome {
+    var failure: Throwable? = null
+    val stopConfirmed = runCatching(stopAndClear)
+        .onFailure { failure = it }
+        .getOrDefault(false)
+    val releaseCompleted = runCatching(release)
+        .onFailure { if (failure == null) failure = it }
+        .isSuccess
+    return LocalEndpointReleaseOutcome(stopConfirmed, releaseCompleted, failure)
+}
+
 data class CastTrack(
     val key: String,
     val label: String,
