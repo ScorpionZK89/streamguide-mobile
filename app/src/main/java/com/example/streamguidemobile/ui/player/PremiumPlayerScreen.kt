@@ -63,6 +63,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
@@ -450,6 +451,7 @@ fun PremiumPlayerScreen(
     }
 
     val gestureModifier = Modifier.playerTouchGestures(
+        mediaId = playbackMedia.mediaId,
         enabled = state.settings.playerGesturesEnabled,
         seekable = seekable,
         activity = activity,
@@ -753,7 +755,9 @@ private fun Tracks.selectedFormat(type: Int): Format? = groups.firstNotNullOfOrN
 private fun androidx.media3.common.TrackSelectionParameters.hasOverride(type: Int): Boolean =
     overrides.values.any { it.type == type }
 
+@Composable
 private fun Modifier.playerTouchGestures(
+    mediaId: String,
     enabled: Boolean,
     seekable: Boolean,
     activity: Activity?,
@@ -763,18 +767,26 @@ private fun Modifier.playerTouchGestures(
     onSeekForward: () -> Unit,
     onGestureIndicator: (String, Float) -> Unit
 ): Modifier {
-    val taps = this.pointerInput(enabled, seekable) {
+    val currentOnTap by rememberUpdatedState(onTap)
+    val currentOnSeekBack by rememberUpdatedState(onSeekBack)
+    val currentOnSeekForward by rememberUpdatedState(onSeekForward)
+    val currentOnGestureIndicator by rememberUpdatedState(onGestureIndicator)
+
+    // A live-to-live channel switch can leave enabled and seekable unchanged. Keying the
+    // handlers to the media and reading the latest callbacks prevents taps from updating the
+    // previous channel's remembered state.
+    val taps = this.pointerInput(mediaId, enabled, seekable) {
         detectTapGestures(
-            onTap = { onTap() },
+            onTap = { currentOnTap() },
             onDoubleTap = { offset ->
                 if (enabled && seekable) {
-                    if (offset.x < size.width / 2f) onSeekBack() else onSeekForward()
-                } else onTap()
+                    if (offset.x < size.width / 2f) currentOnSeekBack() else currentOnSeekForward()
+                } else currentOnTap()
             }
         )
     }
     if (!enabled) return taps
-    return taps.pointerInput(activity, audioManager) {
+    return taps.pointerInput(mediaId, activity, audioManager) {
         var leftSide = true
         var accumulated = 0f
         var startValue = 0.5f
@@ -799,11 +811,11 @@ private fun Modifier.playerTouchGestures(
                         attributes.screenBrightness = value
                         window.attributes = attributes
                     }
-                    onGestureIndicator("Helderheid", value)
+                    currentOnGestureIndicator("Helderheid", value)
                 } else {
                     val max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1)
                     audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, (value * max).roundToInt(), 0)
-                    onGestureIndicator("Volume", value)
+                    currentOnGestureIndicator("Volume", value)
                 }
             }
         )
