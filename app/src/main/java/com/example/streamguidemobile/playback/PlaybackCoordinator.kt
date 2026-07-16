@@ -169,7 +169,7 @@ class PlaybackCoordinator(context: Context) {
             CastPlayer(
                 appContext,
                 context,
-                androidx.media3.cast.DefaultMediaItemConverter(),
+                StreamGuideMediaItemConverter(),
                 10_000L,
                 10_000L,
                 3_000L

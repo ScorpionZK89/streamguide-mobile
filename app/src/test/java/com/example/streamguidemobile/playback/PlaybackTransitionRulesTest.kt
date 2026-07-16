@@ -176,6 +176,14 @@ class PlaybackTransitionRulesTest {
         assertEquals("en", movie.selectedSubtitleLanguage)
     }
 
+    @Test
+    fun `only linear channels use the Cast live stream type`() {
+        assertTrue(isLiveCastMedia("streamguide:live:410"))
+        assertFalse(isLiveCastMedia("streamguide:catchup:410"))
+        assertFalse(isLiveCastMedia("streamguide:movie:410"))
+        assertFalse(isLiveCastMedia("streamguide:episode:410"))
+    }
+
     private fun media(type: PlaybackContentType) = PlaybackMedia(
         mediaId = "streamguide:${type.name.lowercase()}:1",
         contentType = type,
