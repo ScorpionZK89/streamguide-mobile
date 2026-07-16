@@ -22,7 +22,8 @@ class StreamGuideCastOptionsProvider : OptionsProvider {
         return CastOptions.Builder()
             .setReceiverApplicationId(CastMediaControlIntent.DEFAULT_MEDIA_RECEIVER_APPLICATION_ID)
             .setCastMediaOptions(mediaOptions)
-            .setShowSystemOutputSwitcherOnCastIconClick(true)
+            .setShowSystemOutputSwitcherOnCastIconClick(false)
+            .setSessionTransferEnabled(false)
             .setStopReceiverApplicationWhenEndingSession(true)
             .build()
     }
