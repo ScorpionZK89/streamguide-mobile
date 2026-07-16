@@ -3,6 +3,7 @@ package com.example.streamguidemobile
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.room.withTransaction
 import com.example.streamguidemobile.data.AppSettings
 import com.example.streamguidemobile.data.ChannelEntity
 import com.example.streamguidemobile.data.ExistingChannelMatcher
@@ -553,6 +554,31 @@ class StreamGuideViewModel(application: Application) : AndroidViewModel(applicat
 
     fun restartMovie(movieId: Long) {
         viewModelScope.launch { movieDao.updateProgress(movieId, 0L, 0L, false, null) }
+    }
+
+    fun clearChannelHistory(channel: ChannelEntity) {
+        viewModelScope.launch {
+            channelDao.clearWatchHistory(channel.id)
+            settingsRepository.setPlaybackPosition(channel, 0L)
+        }
+    }
+
+    fun clearViewingHistory() {
+        viewModelScope.launch {
+            runCatching {
+                database.withTransaction {
+                    channelDao.clearAllWatchHistory()
+                    movieDao.clearAllProgress()
+                    episodeDao.clearAllProgress()
+                    seriesDao.clearAllProgress()
+                }
+                settingsRepository.clearPlaybackPositions()
+            }.onSuccess {
+                action.value = ActionState(message = "Kijkgeschiedenis gewist")
+            }.onFailure { throwable ->
+                action.value = ActionState(error = throwable.message ?: "Kijkgeschiedenis kon niet worden gewist")
+            }
+        }
     }
 
     fun setMovieWatched(movie: MovieEntity, watched: Boolean) {

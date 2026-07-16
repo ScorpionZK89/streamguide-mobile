@@ -6,6 +6,8 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -28,6 +30,8 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.PlayArrow
@@ -76,6 +80,9 @@ fun CinematicHomeScreen(
     onBrowseLive: () -> Unit = {},
     onOpenMovie: (MovieEntity) -> Unit = {},
     onOpenSeries: (SeriesCardModel) -> Unit = {},
+    onRemoveChannelHistory: (ChannelEntity) -> Unit = {},
+    onRemoveMovieProgress: (Long) -> Unit = {},
+    onRemoveSeriesProgress: (Long) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val content = remember(state.homeRows, state.nowMillis) { buildHomeContent(state.homeRows) }
@@ -88,6 +95,7 @@ fun CinematicHomeScreen(
             .sortedByDescending { it.series.lastWatchedAt }.take(10)
     }
     var infoRow by remember { mutableStateOf<ChannelRowState?>(null) }
+    var pendingRemoval by remember { mutableStateOf<ContinueWatchingRemoval?>(null) }
 
     BoxWithConstraints(
         modifier.fillMaxSize().background(
@@ -120,7 +128,11 @@ fun CinematicHomeScreen(
                 item {
                     HomeSection("Verder kijken", horizontalPadding) {
                         items(content.continueWatching, key = { it.channel.id }) { row ->
-                            ContinueCard(row, onOpen)
+                            ContinueCard(
+                                row = row,
+                                onOpen = onOpen,
+                                onRemove = { pendingRemoval = ContinueWatchingRemoval.LiveChannel(row.channel) }
+                            )
                         }
                     }
                 }
@@ -129,7 +141,11 @@ fun CinematicHomeScreen(
                 item {
                     HomeSection("Films verder kijken", horizontalPadding) {
                         items(movieContinue, key = { "movie-${it.id}" }) { movie ->
-                            MovieContinueCard(movie, onOpenMovie)
+                            MovieContinueCard(
+                                movie = movie,
+                                onOpen = onOpenMovie,
+                                onRemove = { pendingRemoval = ContinueWatchingRemoval.Movie(movie) }
+                            )
                         }
                     }
                 }
@@ -137,7 +153,13 @@ fun CinematicHomeScreen(
             if (seriesContinue.isNotEmpty()) {
                 item {
                     HomeSection("Series verder kijken", horizontalPadding) {
-                        items(seriesContinue, key = { "series-${it.series.id}" }) { card -> SeriesContinueCard(card, onOpenSeries) }
+                        items(seriesContinue, key = { "series-${it.series.id}" }) { card ->
+                            SeriesContinueCard(
+                                card = card,
+                                onOpen = onOpenSeries,
+                                onRemove = { pendingRemoval = ContinueWatchingRemoval.Series(card) }
+                            )
+                        }
                     }
                 }
             }
@@ -161,11 +183,26 @@ fun CinematicHomeScreen(
     infoRow?.let { row ->
         HomeInfoDialog(row = row, onWatch = { infoRow = null; onOpen(row.channel) }, onDismiss = { infoRow = null })
     }
+
+    pendingRemoval?.let { removal ->
+        ContinueWatchingRemovalDialog(
+            title = removal.title,
+            onConfirm = {
+                pendingRemoval = null
+                when (removal) {
+                    is ContinueWatchingRemoval.LiveChannel -> onRemoveChannelHistory(removal.channel)
+                    is ContinueWatchingRemoval.Movie -> onRemoveMovieProgress(removal.movie.id)
+                    is ContinueWatchingRemoval.Series -> onRemoveSeriesProgress(removal.card.series.id)
+                }
+            },
+            onDismiss = { pendingRemoval = null }
+        )
+    }
 }
 
 @Composable
-private fun SeriesContinueCard(card: SeriesCardModel, onOpen: (SeriesCardModel) -> Unit) {
-    MediaCardFrame(width = 112.dp, onClick = { onOpen(card) }) {
+private fun SeriesContinueCard(card: SeriesCardModel, onOpen: (SeriesCardModel) -> Unit, onRemove: () -> Unit) {
+    MediaCardFrame(width = 112.dp, onClick = { onOpen(card) }, onLongClick = onRemove) {
         Box(Modifier.fillMaxWidth().aspectRatio(2f / 3f).background(StreamGuideColors.PanelPressed), contentAlignment = Alignment.Center) {
             if (!card.series.posterUrl.isNullOrBlank()) {
                 AsyncImage(
@@ -191,8 +228,8 @@ private fun SeriesContinueCard(card: SeriesCardModel, onOpen: (SeriesCardModel) 
 }
 
 @Composable
-private fun MovieContinueCard(movie: MovieEntity, onOpen: (MovieEntity) -> Unit) {
-    MediaCardFrame(width = 112.dp, onClick = { onOpen(movie) }) {
+private fun MovieContinueCard(movie: MovieEntity, onOpen: (MovieEntity) -> Unit, onRemove: () -> Unit) {
+    MediaCardFrame(width = 112.dp, onClick = { onOpen(movie) }, onLongClick = onRemove) {
         Box(Modifier.fillMaxWidth().aspectRatio(2f / 3f).background(StreamGuideColors.PanelPressed), contentAlignment = Alignment.Center) {
             if (!movie.posterUrl.isNullOrBlank()) {
                 AsyncImage(model = movie.posterUrl, contentDescription = movie.title, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
@@ -320,8 +357,8 @@ private fun HomeSection(
 }
 
 @Composable
-private fun ContinueCard(row: ChannelRowState, onOpen: (ChannelEntity) -> Unit) {
-    MediaCardFrame(width = 164.dp, onClick = { onOpen(row.channel) }) {
+private fun ContinueCard(row: ChannelRowState, onOpen: (ChannelEntity) -> Unit, onRemove: () -> Unit) {
+    MediaCardFrame(width = 164.dp, onClick = { onOpen(row.channel) }, onLongClick = onRemove) {
         Box {
             MediaArtwork(row, row.channel.name, ArtworkMode.Live, Modifier.fillMaxWidth().aspectRatio(16f / 9f))
             if (row.progress > 0f) {
@@ -402,7 +439,13 @@ private fun CardText(row: ChannelRowState, showNext: Boolean = false) {
 }
 
 @Composable
-private fun MediaCardFrame(width: Dp, onClick: () -> Unit, content: @Composable ColumnScope.() -> Unit) {
+@OptIn(ExperimentalFoundationApi::class)
+private fun MediaCardFrame(
+    width: Dp,
+    onClick: () -> Unit,
+    onLongClick: (() -> Unit)? = null,
+    content: @Composable ColumnScope.() -> Unit
+) {
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
     var focused by remember { mutableStateOf(false) }
@@ -417,6 +460,17 @@ private fun MediaCardFrame(width: Dp, onClick: () -> Unit, content: @Composable 
         label = "media-card-border"
     )
     val shape = RoundedCornerShape(StreamGuideRadii.Card)
+    val inputModifier = if (onLongClick == null) {
+        Modifier.clickable(interactionSource = interactionSource, indication = null, onClick = onClick)
+    } else {
+        Modifier.combinedClickable(
+            interactionSource = interactionSource,
+            indication = null,
+            onLongClickLabel = "Uit Verder kijken verwijderen",
+            onLongClick = onLongClick,
+            onClick = onClick
+        )
+    }
     Column(
         modifier = Modifier
             .width(width)
@@ -427,10 +481,26 @@ private fun MediaCardFrame(width: Dp, onClick: () -> Unit, content: @Composable 
             .clip(shape)
             .onFocusChanged { focused = it.isFocused }
             .focusable(interactionSource = interactionSource)
-            .clickable(interactionSource = interactionSource, indication = null, onClick = onClick)
+            .then(inputModifier)
             .padding(2.dp),
         content = content
     )
+}
+
+private sealed interface ContinueWatchingRemoval {
+    val title: String
+
+    data class LiveChannel(val channel: ChannelEntity) : ContinueWatchingRemoval {
+        override val title: String = channel.name
+    }
+
+    data class Movie(val movie: MovieEntity) : ContinueWatchingRemoval {
+        override val title: String = movie.title
+    }
+
+    data class Series(val card: SeriesCardModel) : ContinueWatchingRemoval {
+        override val title: String = card.series.title
+    }
 }
 
 private enum class ArtworkMode { Hero, Live, Poster }
@@ -537,6 +607,32 @@ private fun HomeInfoDialog(row: ChannelRowState, onWatch: () -> Unit, onDismiss:
             Row(horizontalArrangement = Arrangement.spacedBy(StreamGuideSpacing.Sm)) {
                 CinematicActionButton("Nu kijken", Icons.Default.PlayArrow, primary = true, enabled = true, onClick = onWatch)
                 CinematicActionButton("Sluiten", Icons.Default.Info, enabled = true, onClick = onDismiss)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ContinueWatchingRemovalDialog(title: String, onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    Dialog(onDismissRequest = onDismiss) {
+        val shape = RoundedCornerShape(StreamGuideRadii.Hero)
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(StreamGuideColors.PanelRaised, shape)
+                .border(1.dp, StreamGuideColors.BorderStrong, shape)
+                .padding(StreamGuideSpacing.Xl),
+            verticalArrangement = Arrangement.spacedBy(StreamGuideSpacing.Md)
+        ) {
+            Text("Uit Verder kijken verwijderen?", color = StreamGuideColors.TextPrimary, style = StreamGuideTypography.SectionTitle)
+            Text(
+                "De kijkvoortgang van $title wordt gewist. De titel zelf en je favorieten blijven behouden.",
+                color = StreamGuideColors.TextSecondary,
+                style = StreamGuideTypography.Body
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(StreamGuideSpacing.Sm)) {
+                CinematicActionButton("Verwijderen", Icons.Default.Delete, primary = true, enabled = true, onClick = onConfirm)
+                CinematicActionButton("Annuleren", Icons.Default.Close, enabled = true, onClick = onDismiss)
             }
         }
     }

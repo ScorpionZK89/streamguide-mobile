@@ -53,6 +53,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LiveTv
 import androidx.compose.material.icons.filled.PlayArrow
@@ -657,7 +658,10 @@ private fun HomeScreen(
                             onOpen = onOpen,
                             onBrowseLive = { onDestinationChange(AppDestination.Live) },
                             onOpenMovie = { movie -> onDestinationChange(AppDestination.Movies); onMovieSelected(movie.id) },
-                            onOpenSeries = { card -> onDestinationChange(AppDestination.Series); onSeriesSelected(card.series.id) }
+                            onOpenSeries = { card -> onDestinationChange(AppDestination.Series); onSeriesSelected(card.series.id) },
+                            onRemoveChannelHistory = viewModel::clearChannelHistory,
+                            onRemoveMovieProgress = viewModel::restartMovie,
+                            onRemoveSeriesProgress = viewModel::clearSeriesProgress
                         )
                         destination == AppDestination.Live -> LiveTvScreen(
                             state = state,
@@ -810,6 +814,7 @@ private fun LibraryPlaceholder(title: String) {
 @Composable
 private fun SettingsScreen(state: StreamGuideState, viewModel: StreamGuideViewModel, onAddPlaylist: () -> Unit) {
     var showGroupFilter by remember { mutableStateOf(false) }
+    var showClearHistoryConfirmation by remember { mutableStateOf(false) }
     val appUpdateState by viewModel.appUpdateState.collectAsStateWithLifecycle()
     val activity = LocalContext.current as? MainActivity
     val hiddenGroupCount = state.allGroups.count { group ->
@@ -861,6 +866,12 @@ private fun SettingsScreen(state: StreamGuideState, viewModel: StreamGuideViewMo
                         }
                     }
                 )
+            }
+            item {
+                SettingsSection("Kijkgeschiedenis", Icons.Default.History, "Verder kijken en bekeken titels") {
+                    SettingsSummary("Wis recente zenders en alle opgeslagen voortgang van films en series. Favorieten en playlists blijven behouden.")
+                    SettingsAction("Kijkgeschiedenis wissen", Icons.Default.Delete, onClick = { showClearHistoryConfirmation = true })
+                }
             }
             item {
                 SettingsSectionPair(
@@ -934,6 +945,47 @@ private fun SettingsScreen(state: StreamGuideState, viewModel: StreamGuideViewMo
             onDismiss = { showGroupFilter = false }
         )
     }
+    if (showClearHistoryConfirmation) {
+        ClearViewingHistoryDialog(
+            onConfirm = {
+                showClearHistoryConfirmation = false
+                viewModel.clearViewingHistory()
+            },
+            onDismiss = { showClearHistoryConfirmation = false }
+        )
+    }
+}
+
+@Composable
+private fun ClearViewingHistoryDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Box(
+                Modifier.size(36.dp).background(CinematicColors.GoldMuted, RoundedCornerShape(StreamGuideRadii.Control)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Default.History, contentDescription = null, tint = CinematicColors.Gold, modifier = Modifier.size(18.dp))
+            }
+        },
+        title = { Text("Kijkgeschiedenis wissen?", color = CinematicColors.TextPrimary, style = CinematicTypography.SectionTitle) },
+        text = {
+            Text(
+                "Alle recente zenders, afspeelposities en bekeken-statussen van films en series worden gewist. Favorieten, playlists en bibliotheekinhoud blijven behouden.",
+                color = CinematicColors.TextSecondary,
+                style = CinematicTypography.Body
+            )
+        },
+        confirmButton = {
+            SettingsAction("Alles wissen", Icons.Default.Delete, modifier = Modifier.width(120.dp), primary = true, onClick = onConfirm)
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Annuleren", color = CinematicColors.TextSecondary) }
+        },
+        shape = RoundedCornerShape(StreamGuideRadii.Hero),
+        containerColor = CinematicColors.Panel,
+        tonalElevation = 0.dp
+    )
 }
 
 private fun appUpdateStatusText(state: AppUpdateState): String = when (state) {

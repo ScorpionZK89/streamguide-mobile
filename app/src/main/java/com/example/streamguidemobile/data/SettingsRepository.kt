@@ -204,6 +204,10 @@ class SettingsRepository(private val context: Context) {
         }
     }
 
+    suspend fun clearPlaybackPositions() {
+        context.streamGuideSettings.edit { it.remove(Keys.playbackPositions) }
+    }
+
     private object Keys {
         val showLogos = booleanPreferencesKey("show_logos")
         val compactList = booleanPreferencesKey("compact_list")

@@ -195,6 +195,8 @@ interface ChannelDao {
     @Query("SELECT id FROM channels ORDER BY sortOrder ASC, name COLLATE NOCASE ASC") suspend fun getChannelIds(): List<Long>
     @Query("UPDATE channels SET isFavorite = :favorite WHERE id = :id") suspend fun setFavorite(id: Long, favorite: Boolean)
     @Query("UPDATE channels SET lastWatchedAt = :timestamp WHERE id = :id") suspend fun markWatched(id: Long, timestamp: Long)
+    @Query("UPDATE channels SET lastWatchedAt = NULL WHERE id = :id") suspend fun clearWatchHistory(id: Long)
+    @Query("UPDATE channels SET lastWatchedAt = NULL") suspend fun clearAllWatchHistory()
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insertAll(channels: List<ChannelEntity>)
     @Query("DELETE FROM channels WHERE playlistId = :playlistId") suspend fun deleteForPlaylist(playlistId: Long)
     @Transaction suspend fun replaceForPlaylist(playlistId: Long, channels: List<ChannelEntity>) {
@@ -227,6 +229,8 @@ interface MovieDao {
     @Query("UPDATE movies SET isFavorite = :favorite WHERE id = :id") suspend fun setFavorite(id: Long, favorite: Boolean)
     @Query("UPDATE movies SET playbackPositionMs = :positionMs, playbackDurationMs = :durationMs, isWatched = :watched, lastWatchedAt = :watchedAt WHERE id = :id")
     suspend fun updateProgress(id: Long, positionMs: Long, durationMs: Long, watched: Boolean, watchedAt: Long?)
+    @Query("UPDATE movies SET playbackPositionMs = 0, playbackDurationMs = 0, isWatched = 0, lastWatchedAt = NULL")
+    suspend fun clearAllProgress()
     @Query("UPDATE movies SET resolutionWidth = :width, resolutionHeight = :height WHERE id = :id")
     suspend fun updateResolution(id: Long, width: Int, height: Int)
     @Query("DELETE FROM movies WHERE playlistId = :playlistId") suspend fun deleteForPlaylist(playlistId: Long)
@@ -243,6 +247,8 @@ interface SeriesDao {
     @Query("UPDATE series SET isFavorite = :favorite WHERE id = :id") suspend fun setFavorite(id: Long, favorite: Boolean)
     @Query("UPDATE series SET progressEpisodeId = :episodeId, progressOrder = :episodeOrder, lastWatchedAt = :watchedAt WHERE id = :id")
     suspend fun updateProgress(id: Long, episodeId: Long?, episodeOrder: Int, watchedAt: Long?)
+    @Query("UPDATE series SET progressEpisodeId = NULL, progressOrder = -1, lastWatchedAt = NULL")
+    suspend fun clearAllProgress()
     @Query("DELETE FROM series WHERE playlistId = :playlistId AND id NOT IN (:keptIds)") suspend fun deleteNotIn(playlistId: Long, keptIds: List<Long>)
     @Query("DELETE FROM series WHERE playlistId = :playlistId") suspend fun deleteForPlaylist(playlistId: Long)
 }
@@ -264,6 +270,8 @@ interface EpisodeDao {
     suspend fun setSeasonWatched(seriesId: Long, seasonNumber: Int, watched: Boolean, watchedAt: Long)
     @Query("UPDATE episodes SET isWatched = :watched, playbackPositionMs = CASE WHEN :watched THEN CASE WHEN playbackDurationMs > 0 THEN playbackDurationMs ELSE 1 END ELSE 0 END, playbackDurationMs = CASE WHEN :watched THEN CASE WHEN playbackDurationMs > 0 THEN playbackDurationMs ELSE 1 END ELSE 0 END, lastWatchedAt = CASE WHEN :watched THEN :watchedAt ELSE NULL END WHERE seriesId = :seriesId")
     suspend fun setSeriesWatched(seriesId: Long, watched: Boolean, watchedAt: Long)
+    @Query("UPDATE episodes SET playbackPositionMs = 0, playbackDurationMs = 0, isWatched = 0, lastWatchedAt = NULL")
+    suspend fun clearAllProgress()
 }
 
 @Database(entities = [PlaylistEntity::class, ChannelEntity::class, ProgramEntity::class, MovieEntity::class, SeriesEntity::class, EpisodeEntity::class], version = 4, exportSchema = false)
