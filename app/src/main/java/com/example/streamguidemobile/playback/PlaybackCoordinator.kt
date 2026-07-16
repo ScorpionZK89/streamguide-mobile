@@ -17,6 +17,7 @@ import androidx.media3.common.Tracks
 import androidx.media3.exoplayer.ExoPlayer
 import com.example.streamguidemobile.BuildConfig
 import com.google.android.gms.cast.MediaStatus
+import com.google.android.gms.cast.MediaLoadRequestData
 import com.google.android.gms.cast.framework.CastContext
 import com.google.android.gms.cast.framework.CastSession
 import com.google.android.gms.cast.framework.SessionManagerListener
@@ -49,6 +50,7 @@ class PlaybackCoordinator(context: Context) {
     // module is missing or outdated instead of letting synchronous initialization close the app.
     private var castContext: CastContext? = null
     private var castPlayer: CastPlayer? = null
+    private val castMediaItemConverter = StreamGuideMediaItemConverter()
     private var castInitializationStarted = false
     private var localPlayer: ExoPlayer? = null
     private var localListener: Player.Listener? = null
@@ -170,7 +172,7 @@ class PlaybackCoordinator(context: Context) {
             CastPlayer(
                 appContext,
                 context,
-                StreamGuideMediaItemConverter(),
+                castMediaItemConverter,
                 10_000L,
                 10_000L,
                 3_000L
@@ -532,26 +534,71 @@ class PlaybackCoordinator(context: Context) {
                 )
             )
             applyPreferredLanguages(remotePlayer, media)
-            if (media.isLive) remotePlayer.setMediaItem(media.toCastMediaItem())
-            else remotePlayer.setMediaItem(media.toCastMediaItem(), media.startPositionMs.coerceAtLeast(0L))
-            remotePlayer.prepare()
-            remotePlayer.playWhenReady = media.playWhenReady
+            if (media.isLive) {
+                if (!loadLiveMediaDirectly(media)) {
+                    failCast("Afspelen op Chromecast is mislukt.")
+                    return@launch
+                }
+            } else {
+                remotePlayer.setMediaItem(media.toCastMediaItem(), media.startPositionMs.coerceAtLeast(0L))
+                remotePlayer.prepare()
+                remotePlayer.playWhenReady = media.playWhenReady
+            }
 
             val loaded = withTimeoutOrNull(CAST_LOAD_TIMEOUT_MS) {
                 while (isActive) {
                     if (!isCastSessionAvailable) return@withTimeoutOrNull false
                     if (remotePlayer.playerError != null) return@withTimeoutOrNull false
                     if (remotePlayer.playbackState == Player.STATE_READY) return@withTimeoutOrNull true
+                    val receiverState = currentRemoteMediaState()
+                    if (receiverState == MediaStatus.PLAYER_STATE_PLAYING ||
+                        receiverState == MediaStatus.PLAYER_STATE_PAUSED
+                    ) {
+                        return@withTimeoutOrNull true
+                    }
                     delay(100L)
                 }
                 false
             } == true
-            if (!loaded) {
+            if (loaded && _state.value.status == PlaybackCoordinatorStatus.CAST_STARTING) {
+                transition(
+                    PlaybackCoordinatorStatus.CAST_PLAYBACK,
+                    _state.value.copy(
+                        status = PlaybackCoordinatorStatus.CAST_PLAYBACK,
+                        isPlaying = currentRemoteMediaState() == MediaStatus.PLAYER_STATE_PLAYING,
+                        errorMessage = null,
+                        localPlaybackAuthorized = false
+                    )
+                )
+            } else if (!loaded) {
                 launchCastFailureProbe(media)
                 failCast("Afspelen op Chromecast is mislukt.")
             }
         }
     }
+
+    /** Uses Cast's single-item LOAD command; the Default Receiver rejects this feed as a queue. */
+    private fun loadLiveMediaDirectly(media: PlaybackMedia): Boolean {
+        val remoteClient = castContext?.sessionManager?.currentCastSession?.remoteMediaClient ?: return false
+        val mediaInfo = castMediaItemConverter.toMediaQueueItem(media.toCastMediaItem()).media ?: return false
+        val request = MediaLoadRequestData.Builder()
+            .setMediaInfo(mediaInfo)
+            .setAutoplay(media.playWhenReady)
+            .build()
+        remoteClient.load(request).setResultCallback { result ->
+            if (!result.status.isSuccess) {
+                Log.w(
+                    TAG,
+                    "cast_load rejected code=${result.status.statusCode} " +
+                        "message=${result.status.statusMessage ?: "none"} mediaId=${media.mediaId}"
+                )
+            }
+        }
+        return true
+    }
+
+    private fun currentRemoteMediaState(): Int? =
+        castContext?.sessionManager?.currentCastSession?.remoteMediaClient?.mediaStatus?.playerState
 
     private fun launchCastFailureProbe(media: PlaybackMedia) {
         if (!probedCastMediaIds.add(media.mediaId)) return
