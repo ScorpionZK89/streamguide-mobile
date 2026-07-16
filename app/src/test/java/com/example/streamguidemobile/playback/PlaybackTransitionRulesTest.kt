@@ -212,6 +212,18 @@ class PlaybackTransitionRulesTest {
         assertEquals(source, castCompatibleStreamUrl(source, isLive = true))
     }
 
+    @Test
+    fun `Cast probe recognizes manifests and transport streams without retaining content`() {
+        assertEquals("hls", classifyCastProbeBody("#EXTM3U\n#EXT-X-VERSION:3".toByteArray()))
+        val transportStream = ByteArray(377).also {
+            it[0] = 0x47
+            it[188] = 0x47
+        }
+        assertEquals("mpeg_ts", classifyCastProbeBody(transportStream))
+        assertEquals("other", classifyCastProbeBody("<html>blocked</html>".toByteArray()))
+        assertEquals("empty", classifyCastProbeBody(byteArrayOf()))
+    }
+
     private fun media(type: PlaybackContentType) = PlaybackMedia(
         mediaId = "streamguide:${type.name.lowercase()}:1",
         contentType = type,

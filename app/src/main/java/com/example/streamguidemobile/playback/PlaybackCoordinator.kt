@@ -56,6 +56,7 @@ class PlaybackCoordinator(context: Context) {
     private var pendingMedia: PlaybackMedia? = null
     private var castLoadJob: Job? = null
     private var pendingSessionEnd = SessionEndPurpose.NONE
+    private val probedCastMediaIds = mutableSetOf<String>()
     private var released = false
 
     private val castPlayerListener = object : Player.Listener {
@@ -545,7 +546,23 @@ class PlaybackCoordinator(context: Context) {
                 }
                 false
             } == true
-            if (!loaded) failCast("Afspelen op Chromecast is mislukt.")
+            if (!loaded) {
+                launchCastFailureProbe(media)
+                failCast("Afspelen op Chromecast is mislukt.")
+            }
+        }
+    }
+
+    private fun launchCastFailureProbe(media: PlaybackMedia) {
+        if (!probedCastMediaIds.add(media.mediaId)) return
+        scope.launch(Dispatchers.IO) {
+            val castUrl = castCompatibleStreamUrl(media.streamUrl, media.isLive)
+            buildList {
+                add("original" to media.streamUrl)
+                if (castUrl != media.streamUrl) add("cast" to castUrl)
+            }.forEach { (candidate, url) ->
+                Log.i(TAG, probeCastStream(candidate, url).safeLogLine())
+            }
         }
     }
 
