@@ -9,9 +9,14 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Versienummer, bijvoorbeeld 0.2.0"
+        description: "Testversie, bijvoorbeeld 0.2.33-test"
         required: true
         type: string
+      publish:
+        description: "APK ook als openbare GitHub Release publiceren"
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write
@@ -80,7 +85,15 @@ jobs:
           ./gradlew testDebugUnitTest assembleRelease --stacktrace
           cp app/build/outputs/apk/release/app-release.apk "StreamGuide-Mobile-${RELEASE_VERSION}.apk"
 
+      - name: Ondertekende test-APK bewaren
+        uses: actions/upload-artifact@v4
+        with:
+          name: StreamGuide-Mobile-${{ env.RELEASE_VERSION }}
+          path: StreamGuide-Mobile-${{ env.RELEASE_VERSION }}.apk
+          if-no-files-found: error
+
       - name: GitHub Release publiceren
+        if: ${{ github.event_name != 'workflow_dispatch' || inputs.publish == true }}
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
