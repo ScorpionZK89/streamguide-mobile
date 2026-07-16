@@ -184,6 +184,34 @@ class PlaybackTransitionRulesTest {
         assertFalse(isLiveCastMedia("streamguide:episode:410"))
     }
 
+    @Test
+    fun `Xtream transport stream uses HLS only on Cast`() {
+        val source = "https://provider.invalid/live/user/password/410.ts"
+
+        assertEquals(
+            "https://provider.invalid/live/user/password/410.m3u8",
+            castCompatibleStreamUrl(source, isLive = true)
+        )
+        assertEquals(source, castCompatibleStreamUrl(source, isLive = false))
+    }
+
+    @Test
+    fun `Cast HLS conversion preserves query and fragment`() {
+        assertEquals(
+            "https://provider.invalid/live/u/p/410.m3u8?token=abc#live",
+            castCompatibleStreamUrl(
+                "https://provider.invalid/live/u/p/410.ts?token=abc#live",
+                isLive = true
+            )
+        )
+    }
+
+    @Test
+    fun `non Xtream transport streams stay unchanged`() {
+        val source = "https://provider.invalid/archive/410.ts"
+        assertEquals(source, castCompatibleStreamUrl(source, isLive = true))
+    }
+
     private fun media(type: PlaybackContentType) = PlaybackMedia(
         mediaId = "streamguide:${type.name.lowercase()}:1",
         contentType = type,

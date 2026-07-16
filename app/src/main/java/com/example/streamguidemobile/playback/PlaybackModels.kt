@@ -50,7 +50,7 @@ data class PlaybackMedia(
     /** Lets ExoPlayer inspect the response just as it did before Cast support was added. */
     fun toLocalMediaItem(): MediaItem = buildMediaItem(includeInferredMimeType = false)
 
-    /** Gives the Cast receiver an explicit content type because it cannot sniff through the sender. */
+    /** Gives the Cast receiver an adaptive live URL and explicit content type. */
     fun toCastMediaItem(): MediaItem = buildMediaItem(includeInferredMimeType = true)
 
     private fun buildMediaItem(includeInferredMimeType: Boolean): MediaItem {
@@ -66,11 +66,16 @@ data class PlaybackMedia(
                 }
             )
             .build()
+        val playbackUrl = if (includeInferredMimeType) {
+            castCompatibleStreamUrl(streamUrl, isLive)
+        } else {
+            streamUrl
+        }
         return MediaItem.Builder()
             .setMediaId(mediaId)
-            .setUri(streamUrl)
+            .setUri(playbackUrl)
             .apply {
-                if (includeInferredMimeType) setMimeType(streamMimeType(streamUrl))
+                if (includeInferredMimeType) setMimeType(streamMimeType(playbackUrl))
             }
             .setMediaMetadata(metadata)
             .build()
@@ -198,4 +203,16 @@ internal fun streamMimeType(url: String): String? {
         "webm" -> MimeTypes.VIDEO_WEBM
         else -> null
     }
+}
+
+/**
+ * Xtream's direct MPEG-TS endpoint is ideal for the local ExoPlayer, while Cast receivers need
+ * the HLS manifest exposed by the same live endpoint. Keep every other URL byte-for-byte intact.
+ */
+internal fun castCompatibleStreamUrl(url: String, isLive: Boolean): String {
+    if (!isLive) return url
+    val suffixIndex = url.indexOfAny(charArrayOf('?', '#')).takeIf { it >= 0 } ?: url.length
+    val base = url.substring(0, suffixIndex)
+    if (!base.contains("/live/", ignoreCase = true) || !base.endsWith(".ts", ignoreCase = true)) return url
+    return base.dropLast(3) + ".m3u8" + url.substring(suffixIndex)
 }
