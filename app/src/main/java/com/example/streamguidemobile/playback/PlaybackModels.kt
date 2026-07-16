@@ -51,9 +51,13 @@ data class PlaybackMedia(
     fun toLocalMediaItem(): MediaItem = buildMediaItem(includeInferredMimeType = false)
 
     /** Gives the Cast receiver an adaptive live URL and explicit content type. */
-    fun toCastMediaItem(): MediaItem = buildMediaItem(includeInferredMimeType = true)
+    fun toCastMediaItem(streamUrlOverride: String? = null): MediaItem =
+        buildMediaItem(includeInferredMimeType = true, streamUrlOverride = streamUrlOverride)
 
-    private fun buildMediaItem(includeInferredMimeType: Boolean): MediaItem {
+    private fun buildMediaItem(
+        includeInferredMimeType: Boolean,
+        streamUrlOverride: String? = null
+    ): MediaItem {
         val metadata = MediaMetadata.Builder()
             .setTitle(title)
             .setSubtitle(subtitle)
@@ -66,8 +70,9 @@ data class PlaybackMedia(
                 }
             )
             .build()
+        val defaultCastUrl = castCompatibleStreamUrl(streamUrl, isLive)
         val playbackUrl = if (includeInferredMimeType) {
-            castCompatibleStreamUrl(streamUrl, isLive)
+            streamUrlOverride ?: defaultCastUrl
         } else {
             streamUrl
         }
@@ -75,7 +80,9 @@ data class PlaybackMedia(
             .setMediaId(mediaId)
             .setUri(playbackUrl)
             .apply {
-                if (includeInferredMimeType) setMimeType(streamMimeType(playbackUrl))
+                if (includeInferredMimeType) {
+                    setMimeType(streamMimeType(playbackUrl) ?: streamMimeType(defaultCastUrl))
+                }
             }
             .setMediaMetadata(metadata)
             .build()

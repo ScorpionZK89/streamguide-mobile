@@ -19,23 +19,35 @@ internal data class CastStreamProbeResult(
             "redirected=$redirected scheme=${finalScheme ?: "none"} error=${errorType ?: "none"}"
 }
 
+internal data class ResolvedCastStream(val url: String, val redirected: Boolean)
+
+/** Resolves the provider/CDN redirect in memory so the receiver can load the final media URL. */
+internal fun resolveCastStreamUrl(url: String): ResolvedCastStream {
+    var connection: HttpURLConnection? = null
+    return try {
+        connection = openCastStreamConnection(url).apply {
+            setRequestProperty("Range", "bytes=0-0")
+        }
+        val code = connection.responseCode
+        if (code in 200..299) {
+            val resolved = connection.url.toString()
+            ResolvedCastStream(resolved, redirected = resolved != url)
+        } else {
+            ResolvedCastStream(url, redirected = false)
+        }
+    } catch (_: Exception) {
+        ResolvedCastStream(url, redirected = false)
+    } finally {
+        connection?.disconnect()
+    }
+}
+
 /** Reads only a small prefix and never returns or logs the credential-bearing URL. */
 internal fun probeCastStream(candidate: String, url: String): CastStreamProbeResult {
     var connection: HttpURLConnection? = null
     return try {
-        connection = (URL(url).openConnection() as HttpURLConnection).apply {
-            connectTimeout = 10_000
-            readTimeout = 10_000
-            instanceFollowRedirects = true
-            requestMethod = "GET"
-            useCaches = false
+        connection = openCastStreamConnection(url).apply {
             setRequestProperty("Range", "bytes=0-2047")
-            setRequestProperty(
-                "User-Agent",
-                "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 " +
-                    "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36 CrKey/1.56"
-            )
-            setRequestProperty("Accept", "application/vnd.apple.mpegurl,application/x-mpegURL,video/mp2t,*/*")
         }
         val code = connection.responseCode
         val input = if (code >= 400) connection.errorStream else connection.inputStream
@@ -59,6 +71,21 @@ internal fun probeCastStream(candidate: String, url: String): CastStreamProbeRes
         connection?.disconnect()
     }
 }
+
+private fun openCastStreamConnection(url: String): HttpURLConnection =
+    (URL(url).openConnection() as HttpURLConnection).apply {
+        connectTimeout = 10_000
+        readTimeout = 10_000
+        instanceFollowRedirects = true
+        requestMethod = "GET"
+        useCaches = false
+        setRequestProperty(
+            "User-Agent",
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 " +
+                "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36 CrKey/1.56"
+        )
+        setRequestProperty("Accept", "application/vnd.apple.mpegurl,application/x-mpegURL,video/mp2t,*/*")
+    }
 
 internal fun classifyCastProbeBody(bytes: ByteArray): String {
     if (bytes.isEmpty()) return "empty"

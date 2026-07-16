@@ -30,6 +30,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -535,7 +536,10 @@ class PlaybackCoordinator(context: Context) {
             )
             applyPreferredLanguages(remotePlayer, media)
             if (media.isLive) {
-                if (!loadLiveMediaDirectly(media)) {
+                val castUrl = castCompatibleStreamUrl(media.streamUrl, isLive = true)
+                val resolved = withContext(Dispatchers.IO) { resolveCastStreamUrl(castUrl) }
+                Log.i(TAG, "cast_redirect resolved=${resolved.redirected} mediaId=${media.mediaId}")
+                if (!loadLiveMediaDirectly(media, resolved.url)) {
                     failCast("Afspelen op Chromecast is mislukt.")
                     return@launch
                 }
@@ -578,9 +582,10 @@ class PlaybackCoordinator(context: Context) {
     }
 
     /** Uses Cast's single-item LOAD command; the Default Receiver rejects this feed as a queue. */
-    private fun loadLiveMediaDirectly(media: PlaybackMedia): Boolean {
+    private fun loadLiveMediaDirectly(media: PlaybackMedia, resolvedStreamUrl: String): Boolean {
         val remoteClient = castContext?.sessionManager?.currentCastSession?.remoteMediaClient ?: return false
-        val mediaInfo = castMediaItemConverter.toMediaQueueItem(media.toCastMediaItem()).media ?: return false
+        val mediaInfo = castMediaItemConverter.toMediaQueueItem(media.toCastMediaItem(resolvedStreamUrl)).media
+            ?: return false
         val request = MediaLoadRequestData.Builder()
             .setMediaInfo(mediaInfo)
             .setAutoplay(media.playWhenReady)
