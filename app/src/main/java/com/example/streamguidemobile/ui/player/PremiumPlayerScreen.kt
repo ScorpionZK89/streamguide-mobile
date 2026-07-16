@@ -140,7 +140,11 @@ fun PremiumPlayerScreen(
         }
     }
 
-    var controlsVisible by remember(channel.id) { mutableStateOf(true) }
+    // Keep one controls state for the lifetime of the player screen. Replacing this state
+    // during a channel switch can leave an in-flight gesture or visibility transition tied
+    // to the previous channel. LaunchedEffect(channel.id) still reveals the controls for
+    // every newly selected channel.
+    var controlsVisible by remember { mutableStateOf(true) }
     var activeSheet by remember(channel.id) { mutableStateOf<PlayerSheet?>(null) }
     var isPlaying by remember(channel.id) { mutableStateOf(true) }
     var playbackState by remember(channel.id) { mutableIntStateOf(Player.STATE_IDLE) }
@@ -451,7 +455,6 @@ fun PremiumPlayerScreen(
     }
 
     val gestureModifier = Modifier.playerTouchGestures(
-        mediaId = playbackMedia.mediaId,
         enabled = state.settings.playerGesturesEnabled,
         seekable = seekable,
         activity = activity,
@@ -757,7 +760,6 @@ private fun androidx.media3.common.TrackSelectionParameters.hasOverride(type: In
 
 @Composable
 private fun Modifier.playerTouchGestures(
-    mediaId: String,
     enabled: Boolean,
     seekable: Boolean,
     activity: Activity?,
@@ -767,26 +769,28 @@ private fun Modifier.playerTouchGestures(
     onSeekForward: () -> Unit,
     onGestureIndicator: (String, Float) -> Unit
 ): Modifier {
+    val currentEnabled by rememberUpdatedState(enabled)
+    val currentSeekable by rememberUpdatedState(seekable)
     val currentOnTap by rememberUpdatedState(onTap)
     val currentOnSeekBack by rememberUpdatedState(onSeekBack)
     val currentOnSeekForward by rememberUpdatedState(onSeekForward)
     val currentOnGestureIndicator by rememberUpdatedState(onGestureIndicator)
 
-    // A live-to-live channel switch can leave enabled and seekable unchanged. Keying the
-    // handlers to the media and reading the latest callbacks prevents taps from updating the
-    // previous channel's remembered state.
-    val taps = this.pointerInput(mediaId, enabled, seekable) {
+    // Keep the tap detector alive while the channel changes. Restarting it from the channel
+    // button's pointer event can cancel the detector before the next tap is observed.
+    // Updated-state references keep every value and callback current without that restart.
+    val taps = this.pointerInput(Unit) {
         detectTapGestures(
             onTap = { currentOnTap() },
             onDoubleTap = { offset ->
-                if (enabled && seekable) {
+                if (currentEnabled && currentSeekable) {
                     if (offset.x < size.width / 2f) currentOnSeekBack() else currentOnSeekForward()
                 } else currentOnTap()
             }
         )
     }
     if (!enabled) return taps
-    return taps.pointerInput(mediaId, activity, audioManager) {
+    return taps.pointerInput(activity, audioManager) {
         var leftSide = true
         var accumulated = 0f
         var startValue = 0.5f
